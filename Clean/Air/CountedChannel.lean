@@ -20,9 +20,6 @@ variable {Message : TypeMap} [ProvableType Message]
 
 namespace Channel
 
-/-- `k` for some `1 ≤ k ≤ N`. -/
-def CountUpTo (N : ℕ) (mult : F) : Prop := ∃ k : ℕ, 1 ≤ k ∧ k ≤ N ∧ mult = k
-
 /-- `channel`, with pulls of multiplicity up to `N`. -/
 def counted (N : ℕ) (channel : Channel F Message) : RawChannel F where
   name := channel.name
@@ -45,6 +42,23 @@ from the other channels of a circuit without unfolding them. -/
     (channel.counted N).name = channel.name := rfl
 @[circuit_norm] lemma counted_arity (N : ℕ) (channel : Channel F Message) :
     (channel.counted N).arity = size Message := rfl
+
+/-- `counted 1` gives what the plain typed channel gives: only a pull of multiplicity `1` gets the
+guarantee. -/
+lemma counted_one_guarantees (channel : Channel F Message) (mult : F)
+    (message : Vector F (size Message)) (data : ProverData F) :
+    (channel.counted 1).Guarantees mult message data ↔
+      channel.toRaw.Guarantees mult message data := by
+  simp [counted, toRaw, countUpTo_one_iff]
+
+/-- `counted 1` owes what the plain typed channel owes: an active push owes the guarantee, and a
+pull has multiplicity `0` or `1`. Together with `counted_one_guarantees`, counting up to `1` is the
+channel Clean already had. -/
+lemma counted_one_requirements (channel : Channel F Message) (direction : Direction) (mult : F)
+    (message : Vector F (size Message)) (data : ProverData F) :
+    (channel.counted 1).Requirements direction mult message data ↔
+      channel.toRaw.Requirements direction mult message data := by
+  cases direction <;> simp [counted, toRaw, countUpTo_one_iff]
 
 /-- The interaction of pulling `msg` `count` times from `channel.counted N`. -/
 def pulledUpTo (N : ℕ) (channel : Channel F Message) (count : Expression F)
@@ -92,10 +106,18 @@ variable {N : ℕ} {channel : Channel F Message} {mult : Expression F}
     (pulledUpTo N channel mult msg).channel = channel.counted N := rfl
 @[circuit_norm] lemma pulledUpTo_direction :
     (pulledUpTo N channel mult msg).direction = .pull := rfl
+@[circuit_norm] lemma pulledUpTo_mult :
+    (pulledUpTo N channel mult msg).mult = mult := rfl
+@[circuit_norm] lemma pulledUpTo_msg :
+    (pulledUpTo N channel mult msg).msg = toElements msg := rfl
 @[circuit_norm] lemma emittedUpTo_channel :
     (emittedUpTo N channel mult msg).channel = channel.counted N := rfl
 @[circuit_norm] lemma emittedUpTo_direction :
     (emittedUpTo N channel mult msg).direction = .push := rfl
+@[circuit_norm] lemma emittedUpTo_mult :
+    (emittedUpTo N channel mult msg).mult = mult := rfl
+@[circuit_norm] lemma emittedUpTo_msg :
+    (emittedUpTo N channel mult msg).msg = toElements msg := rfl
 
 @[circuit_norm] lemma pulledUpTo_guarantees :
     (pulledUpTo N channel mult msg).Guarantees env ↔
