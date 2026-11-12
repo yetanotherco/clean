@@ -141,13 +141,6 @@ variable {N : ℕ} {channel : Channel F Message} {mult : Expression F}
     ProvableType.fromElements_toElements]
 end
 
-omit [FiniteField F] in
-/-- A nonzero multiplicity whose value is at most `N`. -/
-lemma countUpTo_of_val {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
-    (hN : mult.val ≤ N) : CountUpTo N mult :=
-  ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
-    (ZMod.natCast_zmod_val mult).symm ⟩
-
 /-- A pull of multiplicity up to `N` is matched by a push, whose requirement gives the
 guarantee. Every other interaction gets no guarantee. -/
 instance (N : ℕ) (channel : Channel F Message) : (channel.counted N).ConsistentUpTo N where
@@ -173,14 +166,12 @@ instance (N : ℕ) (channel : Channel F Message) : (channel.counted N).Consisten
     | push => exact b_reqs b_ne_zero
     | pull => exact absurd (b_reqs.resolve_left b_ne_zero) (b_not_pull rfl)
 
-/-- The instance is found for the `pullBound` of a concrete balance check, without the user
-having to `show (channel.counted N).ConsistentUpTo N` first. That needs
-`Balance.logUpUpTo_pullBound`: instance search runs at reducible transparency and cannot project
-`pullBound` out of the plain `def` `Balance.logUpUpTo`. -/
+/-- Synthesis finds the instance for the `pullBound` of a concrete balance check on its own. That is
+what `SoundEnsemble.markFinished` needs, since it takes the instance as an instance argument, where
+no `simp` step can run first. -/
 example [ComputableRingChar F] (N : ℕ) (channel : Channel F Message) :
-    (channel.counted N).ConsistentUpTo (Balance.logUpUpTo (F := F) N).pullBound := by
-  simp only [Balance.logUpUpTo_pullBound]
-  infer_instance
+    (channel.counted N).ConsistentUpTo (Balance.logUpUpTo (F := F) N).pullBound :=
+  inferInstance
 
 /-- The counted channel is also consistent for balance checks with a larger bound. -/
 theorem counted_consistentUpTo_of_le {M N : ℕ} (h : N ≤ M) (channel : Channel F Message) :

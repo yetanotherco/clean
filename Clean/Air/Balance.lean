@@ -32,6 +32,13 @@ lemma countUpTo_one_iff {mult : F} : CountUpTo 1 mult ↔ mult = 1 := by
   · intro h
     exact ⟨1, le_rfl, le_rfl, by simp [h]⟩
 
+omit [FiniteField F] in
+/-- A nonzero multiplicity whose value is at most `N`. -/
+lemma countUpTo_of_val {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
+    (hN : mult.val ≤ N) : CountUpTo N mult :=
+  ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
+    (ZMod.natCast_zmod_val mult).symm ⟩
+
 namespace Interaction
 /-- A pull of multiplicity `1`: the interactions that typed channels give their guarantee. -/
 def Pull (i : Interaction F) : Prop := i.direction = .pull ∧ i.mult = 1
@@ -329,14 +336,14 @@ If every interaction carrying `msg` is inactive or a pull of multiplicity at mos
 of `msg` is minus a natural number at most `length · N`, which is positive if one of them is an
 active pull.
 -/
-lemma balanceOf_eq_neg_of_pullsUpTo {N : ℕ} {msg : Array F} (hN : N < ringChar F) :
+lemma balanceOf_eq_neg_of_pullUpTo {N : ℕ} {msg : Array F} (hN : N < ringChar F) :
     ∀ {interactions : List (Interaction F)},
     (∀ i ∈ interactions, i.msg = msg → i.mult = 0 ∨ i.PullUpTo N) →
     ∃ S : ℕ, balanceOf interactions msg = -(S : F) ∧ S ≤ interactions.length * N ∧
       ∀ a ∈ interactions, a.msg = msg → a.PullUpTo N → 1 ≤ S
   | [], _ => ⟨ 0, by simp [balanceOf], by simp, by simp ⟩
   | i :: is, h => by
-    obtain ⟨ S, hS, hle, hpos ⟩ := balanceOf_eq_neg_of_pullsUpTo hN (interactions := is)
+    obtain ⟨ S, hS, hle, hpos ⟩ := balanceOf_eq_neg_of_pullUpTo hN (interactions := is)
       fun j hj => h j (List.mem_cons_of_mem i hj)
     rw [balanceOf_cons]
     simp only [List.length_cons]
@@ -379,7 +386,7 @@ theorem LogUpBalanced.matchedUpTo {N : ℕ} {interactions : List (Interaction F)
   by_contra! no_push
   have hN : N < ringChar F :=
     lt_of_le_of_lt (Nat.le_mul_of_pos_left N (List.length_pos_of_mem a_mem)) length_mul_lt
-  obtain ⟨ S, hS, hle, hpos ⟩ := balanceOf_eq_neg_of_pullsUpTo hN (msg := a.msg)
+  obtain ⟨ S, hS, hle, hpos ⟩ := balanceOf_eq_neg_of_pullUpTo hN (msg := a.msg)
     (interactions := interactions)
     fun i i_mem i_msg => Interaction.not_pushUpTo_iff.mp (no_push i i_mem i_msg)
   have S_pos := hpos a a_mem rfl a_pull
@@ -409,8 +416,14 @@ its own: `Balance.logUp` is a plain `def`, so the projection is not reducible. -
 /--
 LogUp with counted pulls: field sums, sound for interaction counts whose product with `N` is below
 the characteristic, so that pulls of multiplicity up to `N` are matched by a push.
+
+Reducible so that instance search can project `pullBound` out of it.
+`SoundEnsemble.markFinished` takes `[channel.ConsistentUpTo balance.pullBound]` as an instance
+argument, and the counted channel's instance ties that bound to the channel's own `N`, so synthesis
+has to see `(logUpUpTo N).pullBound` as `N`. It cannot unfold a plain `def`, and an instance
+argument leaves no place to `simp` first.
 -/
-def Balance.logUpUpTo [ComputableRingChar F] (N : ℕ) : Balance F where
+@[reducible] def Balance.logUpUpTo [ComputableRingChar F] (N : ℕ) : Balance F where
   Balanced := LogUpBalanced
   fits count := count < ComputableRingChar.char F && count * N < ComputableRingChar.char F
   balancedInteractions_of_balanced _ fits balanced :=
@@ -424,10 +437,9 @@ def Balance.logUpUpTo [ComputableRingChar F] (N : ℕ) : Balance F where
       (of_decide_eq_true (Bool.and_eq_true_iff.mp fits).2)
     balanced.matchedUpTo length_mul_lt
 
-/-- `Balance.logUpUpTo N` matches pulls of multiplicity up to `N`. Without this lemma a user of a
-`SoundEnsemble` over `Balance.logUpUpTo N` has to write `show channel.ConsistentUpTo N` by hand,
-because instance search works at reducible transparency and cannot project `pullBound` out of the
-plain `def`. -/
+/-- `Balance.logUpUpTo N` matches pulls of multiplicity up to `N`, for `simp` and `circuit_norm`.
+Instance search needs the same fact, and gets it from the check being `@[reducible]`: a `simp`
+lemma plays no part in synthesis. -/
 @[simp, circuit_norm] lemma Balance.logUpUpTo_pullBound [ComputableRingChar F] (N : ℕ) :
     (Balance.logUpUpTo N : Balance F).pullBound = N := rfl
 
