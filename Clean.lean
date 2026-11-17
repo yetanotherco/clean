@@ -3,7 +3,6 @@ module
 public import Clean.Circuit
 public import Clean.Examples.WitnessExport
 public import Clean.Utils.FiniteField
-public import Clean.Utils.BinaryField
 public import Clean.Utils.SourceSinkPath
 public import Clean.Utils.OfflineMemory
 public import Clean.Circomlib.AliasCheck
@@ -50,7 +49,6 @@ public import Clean.Gadgets.BLAKE3.FinalizeChunk
 public import Clean.Examples.FibonacciVm.Ensemble
 public import Clean.Examples.CountedSquares
 public import Clean.Examples.OpcodeVm.Ensemble
-public import Clean.Examples.BinaryFibonacci.Ensemble
 public import Clean.Gadgets.SHA256.SHA256Compress
 public import Clean.Backends.Circom.Ast
 public import Clean.Backends.Circom.Compile

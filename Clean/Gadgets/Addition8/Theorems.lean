@@ -24,7 +24,8 @@ theorem soundness_zero_carry (x y out carry_in : F p):
   constructor
   · rw [←not_wrap, h, Nat.mod_eq_of_lt hout]
   · apply Nat.div_eq_of_lt
-    rwa [←not_wrap, h]
+    rw [←not_wrap, h]
+    assumption
 
 /-
   Second part of the soundness direction: case of one carry
@@ -73,7 +74,7 @@ theorem soundness_one_carry (x y out carry_in : F p):
     rw [←h] at hout
     rw [sub_mod, Nat.mod_eq_of_lt hout, h]
   · rw [Nat.div_eq_of_lt_le]
-    · rwa [←Nat.one_mul 256] at x_plus_y_overflow_byte
+    · rw [←Nat.one_mul 256] at x_plus_y_overflow_byte; assumption
     · simp
       apply Nat.lt_add_one_of_le
       assumption
@@ -101,7 +102,8 @@ theorem soundness (x y out carry_in carry_out : F p):
     simp only [zero_mul, neg_zero, add_zero] at h
     rw [←sub_eq_add_neg] at h
     have h_spec : carry_in + x + y - out = 0 := by
-      rwa [add_comm (x + y), ←add_assoc] at h
+      rw [add_comm (x + y), ←add_assoc] at h
+      assumption
 
     have thm := soundness_zero_carry x y out carry_in hx hy hout carry_in_bound h_spec
     apply_fun ZMod.val at zero_carry

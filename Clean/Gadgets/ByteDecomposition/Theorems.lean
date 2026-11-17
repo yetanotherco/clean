@@ -100,19 +100,22 @@ theorem soundness (offset : Fin 8) (x low high : F p)
     simp only [low_b]
     rw [UInt32.lt_iff_toNat_lt]
     simp only [UInt32.toNat_ofNat']
-    rwa [low_mod, two_power_mod]
+    rw [low_mod, two_power_mod]
+    assumption
 
   have high_b_lt : high_b < 256 := by
     simp only [high_b]
     rw [UInt32.lt_iff_toNat_lt]
     simp only [UInt32.toNat_ofNat', UInt32.reduceToNat]
-    rwa [high_mod]
+    rw [high_mod]
+    assumption
 
   have x_lt : x_b < 256 := by
     simp only [x_b]
     rw [UInt32.lt_iff_toNat_lt]
     simp only [UInt32.toNat_ofNat', UInt32.reduceToNat]
-    rwa [x_mod]
+    rw [x_mod]
+    assumption
 
   have eq_holds_bv : x_b = low_b + high_b * UInt32.ofNat (2^offset.val) := by
     simp only [x_b, low_b, high_b]
@@ -123,7 +126,8 @@ theorem soundness (offset : Fin 8) (x low high : F p)
     have h : (low.val + high.val * (2^offset.val)) % 2^32 = low.val + high.val * (2^offset.val) := by
       apply Nat.mod_eq_of_lt
       linarith [p_large_enough.elim]
-    rwa [h]
+    rw [h]
+    assumption
 
   specialize h_decomposition_bv (UInt32.ofNat (2^offset.val))
     two_power_lt_bv low_b_lt high_b_lt x_lt eq_holds_bv
@@ -133,9 +137,11 @@ theorem soundness (offset : Fin 8) (x low high : F p)
   constructor
   · apply_fun UInt32.toNat at h1
     simp only [UInt32.toNat_ofNat', UInt32.toNat_mod, low_b, x_b] at h1
-    rwa [low_mod, x_mod, two_power_mod] at h1
+    rw [low_mod, x_mod, two_power_mod] at h1
+    assumption
   · apply_fun UInt32.toNat at h2
     simp only [UInt32.toNat_ofNat', UInt32.toNat_div, high_b, x_b] at h2
-    rwa [high_mod, x_mod, two_power_mod] at h2
+    rw [high_mod, x_mod, two_power_mod] at h2
+    assumption
 
 end Gadgets.ByteDecomposition.Theorems

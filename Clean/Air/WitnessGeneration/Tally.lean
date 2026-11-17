@@ -299,9 +299,9 @@ theorem net_add (tally : Tally F) (channel : String) (message : Array F) (multip
       have hnet := net_eq_of_getElem? hdemand
       dsimp only
       by_cases htotal : demand.multiplicity + multiplicity = 0
-      · rw [dite_eq_left htotal, net_remove]
+      · rw [dif_pos htotal, net_remove]
         split <;> simp_all [eq_comm]
-      · rw [dite_eq_right htotal, net_update]
+      · rw [dif_neg htotal, net_update]
         split <;> simp_all
     · rename_i hdemand
       exact absurd (getElem?_byPosition_of_positions hposition) (by simp [hdemand])
