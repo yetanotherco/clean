@@ -8,26 +8,34 @@ public import Clean.Circuit.Explicit
 /-!
 # Channels with counted pulls
 
-A table that answers `k` identical lookups with one row pulls the facts it relies on with the same
-multiplicity `k`. `Channel.counted N channel` is `channel` with pulls of multiplicity up to `N`: such
-a pull gets the guarantee, and an active push owes it. It is consistent in the sense of
-`RawChannel.ConsistentUpTo N`, so it can be finished in a `SoundEnsemble` whose balance check has a
-`pullBound` of at least `N`, e.g. `Balance.logUpUpTo N`.
+A table that answers `k` identical lookups with one row pulls the fact it relies on once, with
+multiplicity `k`. `Channel.counted N channel` is `channel` with pulls of multiplicity up to `N`:
+such a pull gets the guarantee, and an active push owes it. It is `RawChannel.ConsistentUpTo N`,
+so it can be finished in a `SoundEnsemble` whose balance check has a `pullBound` of at least `N`,
+such as `Balance.logUpUpTo N`: at exactly `N` by instance, above it through
+`counted_consistentUpTo_of_le`.
 -/
 
 variable {F : Type} [FiniteField F]
 variable {Message : TypeMap} [ProvableType Message]
 
+omit [FiniteField F] in
+/-- Channels with different names are different. Lets `circuit_norm` tell a counted channel apart
+from the other channels of a circuit without unfolding them. -/
+@[circuit_norm] lemma RawChannel.eq_false_of_name_ne {a b : RawChannel F}
+    (h : a.name ≠ b.name) : (a = b) = False :=
+  eq_false fun h_eq => h (congrArg RawChannel.name h_eq)
+
 namespace Channel
 
 /-- `channel`, with pulls of multiplicity up to `N`.
 
-The name is kept, so `channel.toRaw`, `channel.counted 2` and `channel.counted 3` may denote
-different `RawChannel`s under one name. That is deliberate: witness generation tallies
-interactions by channel name, and `DemandMode` and `PreallocatedMode` take the plain `Channel`, so
-a counted channel under a new name would silently stop generating rows. An `Ensemble` asks the
-names of its channels to be distinct, so use one raw-channel value per name: a second entry under
-a name already taken fails `unique_channel_names`. -/
+It keeps `channel.name`, so `channel.toRaw` and `channel.counted N` for each `N` may be different
+`RawChannel`s under one name. An ensemble uses only one of them, since its channel names are unique
+(`unique_channel_names`, and `fresh` in `SoundEnsemble.addChannel`). The name is kept for witness
+generation, which tallies interactions by name, and whose `DemandMode` and `PreallocatedMode` take
+the typed `Channel`: under a new name, no component would answer the counted interactions, and
+generation would fail with `unhandledImbalance`. -/
 def counted (N : ℕ) (channel : Channel F Message) : RawChannel F where
   name := channel.name
   arity := size Message
@@ -38,29 +46,20 @@ def counted (N : ℕ) (channel : Channel F Message) : RawChannel F where
     | .push => mult ≠ 0 → channel.Guarantees (fromElements message) data
     | .pull => mult = 0 ∨ CountUpTo N mult
 
-omit [FiniteField F] in
-/-- Channels with different names are different. Lets `circuit_norm` tell a counted channel apart
-from the other channels of a circuit without unfolding them. -/
-@[circuit_norm] lemma _root_.RawChannel.eq_false_of_name_ne {a b : RawChannel F}
-    (h : a.name ≠ b.name) : (a = b) = False :=
-  eq_false fun h_eq => h (congrArg RawChannel.name h_eq)
-
 @[circuit_norm] lemma counted_name (N : ℕ) (channel : Channel F Message) :
     (channel.counted N).name = channel.name := rfl
 @[circuit_norm] lemma counted_arity (N : ℕ) (channel : Channel F Message) :
     (channel.counted N).arity = size Message := rfl
 
-/-- `counted 1` gives what the plain typed channel gives: only a pull of multiplicity `1` gets the
-guarantee. -/
+/-- `counted 1` guarantees what `channel.toRaw` does: only at multiplicity `1`. -/
 lemma counted_one_guarantees_iff (channel : Channel F Message) (mult : F)
     (message : Vector F (size Message)) (data : ProverData F) :
     (channel.counted 1).Guarantees mult message data ↔
       channel.toRaw.Guarantees mult message data := by
   simp [counted, toRaw, countUpTo_one_iff]
 
-/-- `counted 1` owes what the plain typed channel owes: an active push owes the guarantee, and a
-pull has multiplicity `0` or `1`. Together with `counted_one_guarantees_iff`, counting up to `1` is the
-channel Clean already had. -/
+/-- `counted 1` requires what `channel.toRaw` does: an active push owes the guarantee, and a pull
+has multiplicity `0` or `1`. -/
 lemma counted_one_requirements_iff (channel : Channel F Message) (direction : Direction) (mult : F)
     (message : Vector F (size Message)) (data : ProverData F) :
     (channel.counted 1).Requirements direction mult message data ↔
@@ -77,7 +76,8 @@ def emittedUpTo (N : ℕ) (channel : Channel F Message) (mult : Expression F)
     (msg : Message (Expression F)) : AbstractInteraction F :=
   ⟨ channel.counted N, .push, mult, toElements msg ⟩
 
-/-- Pull `msg` `count` times, for `count` up to `N`. -/
+/-- Pull `msg` `count` times from `channel.counted N`, which requires `count` to be `0` or to count
+up to `N`. -/
 @[circuit_norm]
 def pullUpTo (N : ℕ) (channel : Channel F Message) (count : Expression F)
     (msg : Message (Expression F)) : Circuit F Unit := fun _ =>
@@ -149,7 +149,7 @@ variable {N : ℕ} {channel : Channel F Message} {mult : Expression F}
 end
 
 /-- A pull of multiplicity up to `N` is matched by a push, whose requirement gives the
-guarantee. Every other interaction gets no guarantee. -/
+guarantee. Every other interaction's guarantee is vacuous. -/
 instance (N : ℕ) (channel : Channel F Message) : (channel.counted N).ConsistentUpTo N where
   consistent interactions data balanced reqs a a_mem := by
     obtain ⟨ a_channel, - ⟩ := reqs a a_mem
@@ -173,21 +173,17 @@ instance (N : ℕ) (channel : Channel F Message) : (channel.counted N).Consisten
     | push => exact b_reqs b_ne_zero
     | pull => exact absurd (b_reqs.resolve_left b_ne_zero) (b_not_pull rfl)
 
-/-- Synthesis finds the instance for the `pullBound` of a concrete balance check on its own. That is
-what `SoundEnsemble.markFinished` needs, since it takes the instance as an instance argument, where
-no `simp` step can run first. -/
+/-- Instance search sees `(Balance.logUpUpTo N).pullBound` as `N`, which
+`SoundEnsemble.markFinished` relies on. -/
 example [ComputableRingChar F] (N : ℕ) (channel : Channel F Message) :
     (channel.counted N).ConsistentUpTo (Balance.logUpUpTo (F := F) N).pullBound :=
   inferInstance
 
-/-- The counted channel is also consistent for balance checks with a larger bound.
+/-- `channel.counted N` is also `ConsistentUpTo M` for `N ≤ M`.
 
-A theorem and not an instance. The instance above fixes the channel's own `N` on both sides, so
-synthesis closes `ConsistentUpTo N` for a channel counted at `N` and nothing else. An ensemble
-that finishes a channel counted at `N` under a check whose `pullBound` is a larger `M` has to
-supply this theorem with `haveI` before calling `SoundEnsemble.markFinished`, which takes the
-consistency as an instance argument and leaves no place for a `simp` step. As an instance this
-would send synthesis looking for an `N ≤ M` on every goal of the shape. -/
+Not an instance, since synthesis would have to prove `N ≤ M`. To finish `channel.counted N` under a
+check whose `pullBound` is a larger `M`, provide this with `haveI` before
+`SoundEnsemble.markFinished`, or pass it explicitly with `@`. -/
 theorem counted_consistentUpTo_of_le {M N : ℕ} (h : N ≤ M) (channel : Channel F Message) :
     (channel.counted N).ConsistentUpTo M where
   consistent interactions data balanced :=
@@ -195,23 +191,13 @@ theorem counted_consistentUpTo_of_le {M N : ℕ} (h : N ≤ M) (channel : Channe
       ⟨ balanced.toBalancedInteractions, balanced.matchedUpTo.mono h ⟩
 
 /--
-Why `ConsistentUpTo` is needed: for `2 ≤ N` the counted channel is **not**
-`RawChannel.Consistent`, so it could not be finished in a `SoundEnsemble` under Clean's unmodified
-balance premise `BalancedInteractions`.
+For `2 ≤ N < ringChar F`, and a message `m` that `channel` does not guarantee, `channel.counted N`
+is not `RawChannel.Consistent`: it needs the premise `BalancedUpTo N` of `ConsistentUpTo N`.
 
-The counterexample is two pulls of a message the channel does not guarantee, one of multiplicity
-`N` and one of multiplicity `1`, with nothing pushed. `BalancedInteractions` is satisfied:
-`exists_push_of_pull` only has to match pulls of multiplicity `1`, and it counts the pull of `N` as
-an `Interaction.Push` of the message, so the pull of `1` is matched; the count condition is vacuous
-because `N` is neither `0` nor `1`. The counted channel, in contrast, reads both as pulls and hands
-the guarantee to the pull of `1`, which is false.
-
-This is exactly the gap that `MatchedUpTo N` / `BalancedUpTo N` and `Balance.pullBound` close, and
-the reason `Channel.counted` carries a `RawChannel.ConsistentUpTo N` instance instead of a
-`RawChannel.Consistent` one.
-
-The hypothesis `N < ringChar F` is what makes `N` distinct from both `0` and `1` in `F`; together
-with `2 ≤ N` it is all the counterexample needs.
+Two pulls of `m`, of multiplicities `N` and `1`, satisfy `BalancedInteractions`. Since `N` is
+neither `0` nor `1` in `F`, `exists_push_of_pull` takes the pull of `N` as an `Interaction.Push`
+matching the pull of `1`, and the count condition does not apply to `m`. The counted channel reads
+both as pulls, so consistency would give the pull of `1` the guarantee of `m`.
 -/
 theorem counted_not_consistent {N : ℕ} (hN : 2 ≤ N) (h_char : N < ringChar F)
     (channel : Channel F Message) (m : Message F) (data : ProverData F)

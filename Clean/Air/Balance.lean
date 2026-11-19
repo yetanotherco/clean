@@ -20,16 +20,13 @@ soundness theory uses, and a `Balance` is a check that a verifier performs on th
 with a channel, together with the proof that the check implies these facts.
 -/
 
-/-- A multiplicity of `k` for some `1 ≤ k ≤ N`: what a table that answers `k` identical lookups
-with one row pulls the facts it relies on with. `CountUpTo 1` is multiplicity `1`.
+/-- A multiplicity of `k` for some `1 ≤ k ≤ N`: a table that answers `k` identical lookups with one
+row pulls the fact it relies on with multiplicity `k`. `CountUpTo 1` is multiplicity `1`.
 
-What this says is that the multiplicity is named by such a `k`, and nothing about the field it
-lives in. It does not ask for `N < ringChar F`, so in a small enough field two of those `k` name
-the same element, and `CountUpTo 2 (0 : ZMod 2)` holds because `(2 : ZMod 2) = 0`. Asking for the
-bound here would carry a condition on the field through every requirement, guarantee and proof that
-mentions a count, to exclude a case the balance check excludes already: `Balance.logUpUpTo N` fits
-an interaction count only when `count * N < ringChar F`, which over `ZMod 2` with `N = 2` leaves
-`count = 0`, so a witness holding such a pull fails the check independently of its multiplicity. -/
+There is no hypothesis `N < ringChar F`, so distinct `k` may name the same element:
+`CountUpTo 2 (0 : ZMod 2)` holds. Requiring it here would add a condition on the field to every
+requirement and guarantee that mentions a count, and `Balance.logUpUpTo N` excludes the case
+anyway: its `fits` holds for a nonzero interaction count only when `N < ringChar F`. -/
 def CountUpTo (N : ℕ) (mult : F) : Prop := ∃ k : ℕ, 1 ≤ k ∧ k ≤ N ∧ mult = k
 
 lemma countUpTo_one_iff {mult : F} : CountUpTo 1 mult ↔ mult = 1 := by
@@ -41,13 +38,10 @@ lemma countUpTo_one_iff {mult : F} : CountUpTo 1 mult ↔ mult = 1 := by
     exact ⟨1, le_rfl, le_rfl, by simp [h]⟩
 
 omit [FiniteField F] in
-/-- A nonzero multiplicity whose value is at most `N`.
-
-This is how a circuit discharges the requirement of a counted pull. The pull owes
-`mult = 0 ∨ CountUpTo N mult`, and a chip that range-checks its multiplicity knows exactly
-`mult ≠ 0` and `mult.val ≤ N`. Stating it over `ZMod p` rather than a general field is what makes
-`mult.val` available. -/
-lemma countUpTo_of_val {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
+/-- A nonzero multiplicity whose value is at most `N` counts up to `N`. A chip that range-checks its
+multiplicity gets from this, once the case `mult = 0` is split off, the requirement
+`mult = 0 ∨ CountUpTo N mult` of a counted pull. -/
+lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
     (ZMod.natCast_zmod_val mult).symm ⟩
@@ -68,8 +62,7 @@ lemma not_push_iff {i : Interaction F} : ¬i.Push ↔ i.mult = 0 ∨ i.Pull := b
   simp only [Push, Pull, not_and, Classical.not_imp]
   tauto
 
-/-- A pull of multiplicity `k` for some `1 ≤ k ≤ N`: a table that answers `k` identical lookups
-with one row pulls the facts it relies on with the same multiplicity. `Pull` is `PullUpTo 1`. -/
+/-- A pull of multiplicity `k` for some `1 ≤ k ≤ N`. `Pull` is `PullUpTo 1`. -/
 def PullUpTo (N : ℕ) (i : Interaction F) : Prop :=
   i.direction = .pull ∧ CountUpTo N i.mult
 
@@ -138,11 +131,11 @@ lemma BalancedInteractions.nil : BalancedInteractions ([] : List (Interaction F)
   ⟨ by simp, by simp [activeCount] ⟩
 
 /--
-Every pull of multiplicity up to `N` is matched by an interaction that pushes its message. For
-`N = 1` this is `BalancedInteractions.exists_push_of_pull`. For larger `N` it needs more than balance
-of the counts: under field-sum balance, `(p - 1) / 2` pulls of multiplicity `2` and one pull of
-multiplicity `1` sum to `p ≡ 0` with no push. It holds when the number of interactions times `N`
-is below the characteristic, see `LogUpBalanced.matchedUpTo`.
+Every pull of multiplicity up to `N` is matched by an interaction that pushes its message.
+`BalancedInteractions` implies it for `N = 1` (`BalancedInteractions.matchedUpTo_one`). For `N = 2`,
+field sums over fewer interactions than an odd characteristic `p` do not: `(p - 1) / 2` pulls of
+multiplicity `2` and one of multiplicity `1` sum to `0` with no push. LogUp balance implies it when
+the number of interactions times `N` is below the characteristic (`LogUpBalanced.matchedUpTo`).
 -/
 def MatchedUpTo (N : ℕ) (interactions : List (Interaction F)) : Prop :=
   ∀ a ∈ interactions, a.PullUpTo N → ∃ b ∈ interactions, b.msg = a.msg ∧ b.PushUpTo N
@@ -185,8 +178,7 @@ lemma BalancedUpTo.of_perm {N : ℕ} {as bs : List (Interaction F)} :
 lemma BalancedUpTo.nil (N : ℕ) : BalancedUpTo N ([] : List (Interaction F)) :=
   ⟨ .nil, .nil N ⟩
 
-/-- At bound `1`, balance with matched pulls is `BalancedInteractions`: a channel that does not
-count keeps the balance premise its soundness proofs had before counted pulls. -/
+/-- At bound `1`, `BalancedUpTo` is just `BalancedInteractions`. -/
 lemma balancedUpTo_one_iff {interactions : List (Interaction F)} :
     BalancedUpTo 1 interactions ↔ BalancedInteractions interactions :=
   ⟨ fun balanced => balanced.toBalancedInteractions,
@@ -202,18 +194,15 @@ structure Balance (F : Type) [FiniteField F] where
   fits : ℕ → Bool
   balancedInteractions_of_balanced : ∀ interactions, fits interactions.length →
     Balanced interactions → BalancedInteractions interactions
-  /-- The largest pull multiplicity that the check matches with a push. -/
+  /-- The multiplicity up to which the check matches pulls with a push. -/
   pullBound : ℕ := 1
   /--
   Pulls of multiplicity up to `pullBound` are matched by a push.
 
-  For the default `pullBound := 1` this is `BalancedInteractions.matchedUpTo_one`, so a check that
-  matches nothing beyond unit pulls does not have to provide it. That is why the conclusion of
-  `balancedInteractions_of_balanced` is a premise here: a structure's default value is either
-  elaborated once with `pullBound` still abstract (a term default, which then cannot be
-  `matchedUpTo_one`) or elaborated per instance but without the earlier fields in scope (a tactic
-  default). Passing the weaker balance in makes the second form work. A check that sets
-  `pullBound := N` for `N > 1` and omits this field gets a type error, not a wrong default.
+  The default proof, `BalancedInteractions.matchedUpTo_one`, covers the default `pullBound := 1`; a
+  check that raises `pullBound` and omits this field fails to elaborate. `BalancedInteractions` is a
+  premise so that the default can be a tactic: a term default is elaborated once, with `pullBound`
+  abstract, and a tactic default cannot refer to the field `balancedInteractions_of_balanced`.
   -/
   matchedUpTo_of_balanced : ∀ interactions, fits interactions.length →
     Balanced interactions → BalancedInteractions interactions →
@@ -312,9 +301,8 @@ theorem LogUpBalanced.exists_push_of_pull {interactions : List (Interaction F)}
   omega
 
 /--
-If every interaction carrying `msg` is inactive or a pull of multiplicity at most `N`, the balance
-of `msg` is minus a natural number at most `length · N`, which is positive if one of them is an
-active pull.
+If every interaction carrying `msg` is inactive or a `PullUpTo N`, the balance of `msg` is `-S` for
+a natural number `S ≤ interactions.length * N`, with `1 ≤ S` if any of them is a `PullUpTo N`.
 -/
 lemma balanceOf_eq_neg_of_pullUpTo {N : ℕ} {msg : Array F} (hN : N < ringChar F) :
     ∀ {interactions : List (Interaction F)},
@@ -355,7 +343,7 @@ lemma balanceOf_eq_neg_of_pullUpTo {N : ℕ} {msg : Array F} (hN : N < ringChar 
 /--
 Every pull of multiplicity up to `N` is matched by a push, when the number of interactions times
 `N` is below the characteristic: otherwise the multiplicities of the pulls of a message could add
-up to a multiple of the characteristic.
+up to a multiple of the characteristic (`exists_logUpBalanced_not_matchedUpTo`).
 -/
 theorem LogUpBalanced.matchedUpTo {N : ℕ} {interactions : List (Interaction F)}
     (balanced : LogUpBalanced interactions) (length_mul_lt : interactions.length * N < ringChar F) :
@@ -376,21 +364,14 @@ theorem LogUpBalanced.matchedUpTo {N : ℕ} {interactions : List (Interaction F)
   omega
 
 /--
-The bound of `matchedUpTo` is not an artifact of its proof: a bound on the number of interactions
-alone, which is all `Balance.logUp` asks, accepts lists in which a pull of multiplicity up to `N`
-is matched by no push.
+The bound of `LogUpBalanced.matchedUpTo` is needed: a bound on the length alone, which is all
+`Balance.logUp` asks, accepts two pulls of multiplicities `N` and `ringChar F - N`, which sum to the
+characteristic and so balance with no push. `Balance.logUpUpTo N` excludes them by also asking
+`count * N < ringChar F`.
 
-Two pulls, of multiplicities `N` and `ringChar F - N`, are such a list whenever `N < ringChar F`
-and `ringChar F ≤ 2 * N`: both multiplicities count up to `N`, they sum to the characteristic, and
-a list of length `2` passes a bound on the length alone. This is what `Balance.logUpUpTo N` rules
-out by asking for `count * N < ringChar F` as well.
-
-What this covers, and what it does not: `ringChar F ≤ 2 * N` bounds the characteristic, not the
-number of elements, and bounds it in terms of `N`. The shape does generalize, since `L`
-multiplicities in `[1, N]` reach every sum between `L` and `L * N`, so any field with
-`L < ringChar F ≤ L * N` admits the same counterexample on `L` interactions; the inequality is
-strict because at `L = ringChar F` the list no longer passes a bound on the length alone. That
-version is not proved here.
+Stated for `2 ≤ N < ringChar F ≤ 2 * N`, where both multiplicities lie in `[1, N]`. Since `L`
+multiplicities in `[1, N]` reach every sum from `L` to `L * N`, the construction extends to `L`
+pulls whenever `L < ringChar F ≤ L * N`; that is not proved here.
 -/
 theorem exists_logUpBalanced_not_matchedUpTo {N : ℕ} (hN : 2 ≤ N) (h_lt : N < ringChar F)
     (h_le : ringChar F ≤ 2 * N) (channel : RawChannel F) (msg : Array F)
@@ -433,21 +414,22 @@ def Balance.logUp [ComputableRingChar F] : Balance F where
     ⟨ balanced.exists_push_of_pull length_lt,
       balanced.activeCount_push_eq_activeCount_pull_of_isBool length_lt ⟩
 
-/-- `Balance.logUp` matches pulls of multiplicity `1` only. Stated so that `simp`/`circuit_norm`
-can reduce a `ConsistentUpTo (Balance.logUp).pullBound` goal, which instance search cannot do on
-its own: `Balance.logUp` is a plain `def`, so the projection is not reducible. -/
-@[simp, circuit_norm] lemma Balance.logUp_pullBound [ComputableRingChar F] :
+/-- `Balance.logUp` keeps the default `pullBound`, for `circuit_norm`. Instance search does not see
+this, since `Balance.logUp` is not reducible. -/
+@[circuit_norm] lemma Balance.logUp_pullBound [ComputableRingChar F] :
     (Balance.logUp : Balance F).pullBound = 1 := rfl
 
 /--
 LogUp with counted pulls: field sums, sound for interaction counts whose product with `N` is below
 the characteristic, so that pulls of multiplicity up to `N` are matched by a push.
 
-Reducible so that instance search can project `pullBound` out of it.
-`SoundEnsemble.markFinished` takes `[channel.ConsistentUpTo balance.pullBound]` as an instance
-argument, and the counted channel's instance ties that bound to the channel's own `N`, so synthesis
-has to see `(logUpUpTo N).pullBound` as `N`. It cannot unfold a plain `def`, and an instance
-argument leaves no place to `simp` first.
+`fits` sees only a count, and `Ensemble.interactionsFit` applies it to every channel, counted or
+not: a channel whose pulls all have multiplicity `1` is also asked for `count * N < ringChar F`, not
+just the `count < ringChar F` of `Balance.logUp`.
+
+Reducible so that instance search sees `(logUpUpTo N).pullBound` as `N`:
+`SoundEnsemble.markFinished` takes `[channel.ConsistentUpTo balance.pullBound]`, and the instance
+for `Channel.counted N` is stated at `N`.
 -/
 @[reducible] def Balance.logUpUpTo [ComputableRingChar F] (N : ℕ) : Balance F where
   Balanced := LogUpBalanced
@@ -463,14 +445,12 @@ argument leaves no place to `simp` first.
       (of_decide_eq_true (Bool.and_eq_true_iff.mp fits).2)
     balanced.matchedUpTo length_mul_lt
 
-/-- `Balance.logUpUpTo N` matches pulls of multiplicity up to `N`, for `simp` and `circuit_norm`.
-Instance search needs the same fact, and gets it from the check being `@[reducible]`: a `simp`
-lemma plays no part in synthesis. -/
-@[simp, circuit_norm] lemma Balance.logUpUpTo_pullBound [ComputableRingChar F] (N : ℕ) :
+/-- `Balance.logUpUpTo N` has `pullBound` `N`, for `circuit_norm`. Instance search sees this through
+`@[reducible]`, not through this lemma. -/
+@[circuit_norm] lemma Balance.logUpUpTo_pullBound [ComputableRingChar F] (N : ℕ) :
     (Balance.logUpUpTo N : Balance F).pullBound = N := rfl
 
-/-- At bound `1`, the counted check is `Balance.logUp` itself, so an ensemble that does not count
-keeps the check it already had, down to the proposition its witness has to satisfy. -/
+/-- At bound `1`, the counted check is `Balance.logUp`. -/
 theorem Balance.logUpUpTo_one [ComputableRingChar F] :
     (Balance.logUpUpTo 1 : Balance F) = Balance.logUp := by
   unfold Balance.logUpUpTo Balance.logUp
@@ -509,8 +489,8 @@ def Balance.multiset : Balance F where
     exact ⟨ b, b_mem, h_b.2.1, h_b.2.2, by simp [h_b.1] ⟩
   -- `matchedUpTo_of_balanced` is the default: `pullBound` is `1`.
 
-/-- `Balance.multiset` matches pulls of multiplicity `1` only. -/
-@[simp, circuit_norm] lemma Balance.multiset_pullBound :
+/-- `Balance.multiset` keeps the default `pullBound`, for `circuit_norm`. -/
+@[circuit_norm] lemma Balance.multiset_pullBound :
     (Balance.multiset : Balance F).pullBound = 1 := rfl
 
 /- ## Conditions on channels that strengthen the implications of interaction balance. -/
@@ -576,9 +556,9 @@ instance (channel : RawChannel F) [channel.Normal] : channel.Consistent :=
   consistent_of_normal channel
 
 /--
-Consistency on balanced lists whose pulls of multiplicity up to `N` are matched by a push
-(`MatchedUpTo N`). Channels with counted pulls are consistent in this sense, under a balance check
-whose `pullBound` is at least `N`.
+`Consistent` under the stronger premise `BalancedUpTo N`, which also matches pulls of multiplicity
+up to `N` with a push. Every `Consistent` channel is `ConsistentUpTo N`. A `SoundEnsemble` asks it
+of its finished channels at its balance check's `pullBound`.
 -/
 class ConsistentUpTo (N : ℕ) (channel : RawChannel F) : Prop where
   consistent : ∀ (interactions : List (Interaction F)) (data : ProverData F),
@@ -590,8 +570,7 @@ instance (N : ℕ) (channel : RawChannel F) [channel.Consistent] : channel.Consi
   consistent interactions data balanced :=
     Consistent.consistent interactions data balanced.toBalancedInteractions
 
-/-- At bound `1`, consistency under counted pulls is `Consistent`: `ConsistentUpTo` generalizes
-that class rather than replacing it. -/
+/-- At bound `1`, `ConsistentUpTo` is just `Consistent`. -/
 lemma consistentUpTo_one_iff (channel : RawChannel F) :
     channel.ConsistentUpTo 1 ↔ channel.Consistent := by
   constructor
