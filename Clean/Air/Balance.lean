@@ -48,8 +48,9 @@ This is how a circuit discharges the requirement of a counted pull. The pull owe
 `mult ≠ 0` and `mult.val ≤ N`. Stating it over `ZMod p` rather than a general field is what makes
 `mult.val` available.
 
-No example in this repo range-checks a multiplicity, because the bound there is `2` and a
-constraint is cheaper. The chips that do are in lambda_vm, where the bound is a byte. -/
+`Clean/Examples/StagedSquares` range-checks a multiplicity by pulling a channel that guarantees
+`CountUpTo`. No example range-checks one by its `.val` against a table, because the bound there is
+`2` and a constraint is cheaper; the chips that do are in lambda_vm, where the bound is a byte. -/
 lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
