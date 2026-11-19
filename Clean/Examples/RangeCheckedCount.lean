@@ -21,6 +21,10 @@ requirements on it, which `OrderedChannelRefl` rules out. A finishing order of c
 `tableSoundness` finishes `bytes` before `doubles` through
 `Ensemble.tableSoundness_of_stagedRequirements`. Witness generation is not exercised; each
 component declares one only because `Component` requires it.
+
+The last two sections add a verifier to the same tables: one that pulls its public input from
+`bytes`, and one that also pushes it to a further channel, which owes a requirement that its
+guarantee on `bytes` pays for.
 -/
 
 namespace RangeCheckedCount
@@ -175,13 +179,17 @@ theorem stagedRequirements :
     ⟨Component.requirementsAfter_of_not_mem _ (by simp [circuit_norm, bytes_ne_doubles.symm]),
       Component.requirementsAfter_of_guarantees_subset (by simp [circuit_norm])⟩⟩
 
+/-- Every channel a component has guarantees on is finished. -/
+theorem guarantees_subset_finished : ∀ component ∈ (ensemble (p := p)).tables,
+    component.circuit.channelsWithGuarantees ⊆ finished := by
+  simp [ensemble, circuit_norm, consumer, doubler, bytes]
+
 /-- Every table is sound under `Balance.logUpUpTo 255`, with `bytes` finished before `doubles`. -/
 theorem tableSoundness : (ensemble (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
   apply Ensemble.tableSoundness_of_stagedRequirements finished (List.Subset.refl _)
     (verifier_subset_finished := by simp [ensemble, circuit_norm, Verifier.Program.empty])
     (verifier_no_requirements := by simp [ensemble, circuit_norm, Verifier.Program.empty])
-    (staged := stagedRequirements)
-  · simp [ensemble, circuit_norm, consumer, doubler, bytes]
+    (staged := stagedRequirements) guarantees_subset_finished
   · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance⟩
 
@@ -214,9 +222,92 @@ theorem tableSoundness_withVerifier :
     (List.Subset.refl _)
     (verifier_subset_finished := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
     (verifier_no_requirements := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
-    (staged := stagedRequirements)
-  · simp [ensembleWithVerifier, ensemble, circuit_norm, consumer, doubler, bytes]
+    (staged := stagedRequirements) guarantees_subset_finished
   · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance⟩
+
+/-! ## A verifier that pushes
+
+A verifier's push owes the channel's guarantee for a value of the public input, which holds only if
+something establishes it. Here the verifier first pulls its input from `bytes`, then pushes it to
+`seenBytes`, whose guarantee is that the value is a byte: its requirement on the `seenBytes` stage
+follows from its guarantee on the earlier `bytes` stage, as a table's would. -/
+
+/-- Values known to be bytes. -/
+def seenBytes : Channel (F p) field where
+  name := "seen-bytes"
+  Guarantees x _ := x.val < 256
+
+omit [Fact (p > 512)] in
+lemma seenBytes_ne_doubles : (seenBytes (p := p)).toRaw ≠ doubles.counted 255 := fun h => by
+  have := congrArg RawChannel.name h
+  simp [seenBytes, doubles, circuit_norm] at this
+
+lemma seenBytes_ne_bytes : (seenBytes (p := p)).toRaw ≠ bytes.channel.toRaw := fun h => by
+  have := congrArg RawChannel.name h
+  simp [seenBytes, bytes, circuit_norm] at this
+
+/-- Pulls the public input from `bytes`, then pushes it to `seenBytes`. -/
+def forwardingVerifier : Verifier.Program (F p) field where
+  main x := do
+    Verifier.pull bytes.channel x
+    Verifier.push seenBytes x
+  Spec x _ := x.val < 256
+  soundness := by simp_all [circuit_norm, bytes]
+
+/-- `ensemble` with `forwardingVerifier`, and the channel it pushes to. -/
+def ensembleWithForwardingVerifier : Ensemble (F p) field where
+  tables := (ensemble (p := p)).tables
+  unique_names := (ensemble (p := p)).unique_names
+  channels := seenBytes.toRaw :: (ensemble (p := p)).channels
+  unique_channel_names := by simp [ensemble, circuit_norm, bytes, doubles, seenBytes]
+  tables_channels := fun table h => List.Subset.trans ((ensemble (p := p)).tables_channels table h)
+    (List.subset_cons_self _ _)
+  verifier := forwardingVerifier
+  verifier_channels := by simp [ensemble, circuit_norm, forwardingVerifier, bytes, seenBytes]
+
+/-- The stages: `seenBytes` after `doubles` after `bytes`, each a whole channel. -/
+abbrev stages : List (Stage (F p)) :=
+  { channel := seenBytes.toRaw } :: finished.map fun channel => { channel }
+
+/-- Sound under `Balance.logUpUpTo 255`. The verifier's push to `seenBytes` is paid for by its pull
+from `bytes`, finished earlier. -/
+theorem tableSoundness_withForwardingVerifier :
+    (ensembleWithForwardingVerifier (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
+  apply Ensemble.tableSoundness_of_stagedRequirementsOn (ens := ensembleWithForwardingVerifier)
+    stages
+  · simp [ensembleWithForwardingVerifier, ensemble]
+  · exact fun table h c h_c _ _ _ => ⟨{ channel := c }, List.mem_cons_of_mem _
+      (List.mem_map_of_mem (guarantees_subset_finished _ h h_c)), rfl, rfl⟩
+  · intro c h_c _ _ _ _
+    simp [ensembleWithForwardingVerifier, circuit_norm, forwardingVerifier, bytes] at h_c
+    subst h_c
+    exact ⟨{ channel := bytes.channel.toRaw }, List.mem_cons_of_mem _
+      (List.mem_map_of_mem (by simp [finished])), rfl, rfl⟩
+  · simp only [stages, finished, List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil,
+      or_false, forall_eq_or_imp, forall_eq]
+    exact ⟨inferInstance, inferInstance, inferInstance⟩
+  · intro component h
+    refine ⟨Component.requirementsAfterOn_of_not_mem _ ?_,
+      Component.stagedRequirementsOn_of_stagedRequirements (stagedRequirements component h)⟩
+    simp only [ensembleWithForwardingVerifier, ensemble, List.mem_cons, List.not_mem_nil,
+      or_false] at h
+    rcases h with rfl | rfl | rfl
+    · simp [circuit_norm, consumer, seenBytes_ne_doubles]
+    · simp [circuit_norm, doubler, seenBytes_ne_doubles]
+    · simp [circuit_norm, seenBytes_ne_bytes]
+  · refine ⟨?_, Ensemble.verifierStagedRequirementsOn_of_not_mem ?_⟩
+    · intro data h_earlier i h_i _
+      have h_bytes := h_earlier { channel := bytes.channel.toRaw } (by simp [finished])
+      simp [Ensemble.VerifierGuaranteesOn, ensembleWithForwardingVerifier, circuit_norm,
+        forwardingVerifier, bytes, seenBytes, Operations.interactionValuesWith_eq_map]
+        at h_bytes h_i ⊢
+      subst h_i
+      rw [AbstractInteraction.eval_guarantees, ChannelInteraction.toRaw_guarantees] at h_bytes
+      rw [AbstractInteraction.eval_requirements, ChannelInteraction.toRaw_requirements]
+      simp_all [circuit_norm, ChannelInteraction.Guarantees, ChannelInteraction.Requirements,
+        bytes]
+    · simp [ensembleWithForwardingVerifier, circuit_norm, forwardingVerifier,
+        Ne.symm seenBytes_ne_doubles, Ne.symm seenBytes_ne_bytes]
 
 end RangeCheckedCount
