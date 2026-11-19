@@ -18,6 +18,13 @@ a pull gets the guarantee, and an active push owes it. It is consistent in the s
 variable {F : Type} [FiniteField F]
 variable {Message : TypeMap} [ProvableType Message]
 
+omit [FiniteField F] in
+/-- Channels with different names are different. Lets `circuit_norm` tell a counted channel apart
+from the other channels of a circuit without unfolding them. -/
+@[circuit_norm] lemma RawChannel.eq_false_of_name_ne {a b : RawChannel F}
+    (h : a.name ≠ b.name) : (a = b) = False :=
+  eq_false fun h_eq => h (congrArg RawChannel.name h_eq)
+
 namespace Channel
 
 /-- `channel`, with pulls of multiplicity up to `N`.
@@ -37,13 +44,6 @@ def counted (N : ℕ) (channel : Channel F Message) : RawChannel F where
     match direction with
     | .push => mult ≠ 0 → channel.Guarantees (fromElements message) data
     | .pull => mult = 0 ∨ CountUpTo N mult
-
-omit [FiniteField F] in
-/-- Channels with different names are different. Lets `circuit_norm` tell a counted channel apart
-from the other channels of a circuit without unfolding them. -/
-@[circuit_norm] lemma _root_.RawChannel.eq_false_of_name_ne {a b : RawChannel F}
-    (h : a.name ≠ b.name) : (a = b) = False :=
-  eq_false fun h_eq => h (congrArg RawChannel.name h_eq)
 
 @[circuit_norm] lemma counted_name (N : ℕ) (channel : Channel F Message) :
     (channel.counted N).name = channel.name := rfl

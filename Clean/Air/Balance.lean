@@ -47,7 +47,7 @@ This is how a circuit discharges the requirement of a counted pull. The pull owe
 `mult = 0 ∨ CountUpTo N mult`, and a chip that range-checks its multiplicity knows exactly
 `mult ≠ 0` and `mult.val ≤ N`. Stating it over `ZMod p` rather than a general field is what makes
 `mult.val` available. -/
-lemma countUpTo_of_val {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
+lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
     (ZMod.natCast_zmod_val mult).symm ⟩
