@@ -7,15 +7,20 @@ public import Clean.Air.FlatEnsemble
 /-!
 # Soundness by channel finishing order
 
-`OrderedChannel` orders tables: a table may not both pull from a channel and owe requirements on it.
-That rules out a table whose requirements on a channel follow from guarantees on *other* channels,
-like a pull whose multiplicity is range-checked by a lookup on another channel: `LT` pulls `IS_HALF`
-with multiplicity `μ`, and `μ ≤ 255` comes from pulling `ARE_BYTES[μ, 0]`.
+`OrderedChannel` orders tables: a table may not both pull from a channel and owe requirements on it,
+even when those requirements follow from its guarantees on *other* channels. A counted pull whose
+multiplicity is range-checked by a lookup on another channel is such a case. In a zkVM's ALU (not
+in this repository), `LT` pulls `IS_HALF` with multiplicity `μ`, and `μ ≤ 255` comes from pulling
+`ARE_BYTES[μ, 0]`; `Clean/Examples/RangeCheckedCount.lean` has the same shape.
 
 Here channels are ordered instead. `finished` lists the channels newest first, and a component's
 requirements on a channel may use its guarantees on the channels finished before it
 (`Component.StagedRequirements`). Then, by induction from the oldest channel, every channel's
 requirements hold, so by consistency every channel's guarantees hold, and every table's spec follows.
+
+Both soundness theorems are for ensembles of tables. They assume `ens.verifier = .empty F PublicIO`,
+so they do not cover an ensemble built with `Ensemble.addVm`, which takes the VM's verifier, and
+there is no staged counterpart of `Ensemble.addVm_soundVmChannel_of_soundChannels` yet.
 -/
 
 variable {F : Type} [FiniteField F]
@@ -169,11 +174,11 @@ end Ensemble
 ## Stages: a channel and a class of its messages
 
 A channel that one table both pulls from and pushes to, on different messages, is not a cycle. The
-ALU bus of a VM is the example: a division table pulls `LT` and `MUL` results and pushes `DIVREM`
-results, all on the same bus. Ordering by stage, a channel together with a class of messages,
-lets the `DIVREM` stage be finished after the `LT`/`MUL` stage. Balance is message by message
-(`BalancedUpTo.filter_msg`), so each stage balances by itself. A whole channel is the stage whose
-class is every message.
+ALU bus of a zkVM (not in this repository) is the example: a division table pulls `LT` and `MUL`
+results and pushes `DIVREM` results, all on the same bus. Ordering by stage, a channel together
+with a class of messages, lets the `DIVREM` stage be finished after the `LT`/`MUL` stage. Balance is
+message by message (`BalancedUpTo.filter_msg`), so each stage balances by itself. A whole channel
+is the stage whose class is every message.
 -/
 
 /-- The messages of one class on one channel. -/
@@ -195,6 +200,7 @@ def Table.RequirementsAfterOn (table : Table F) (stage : Stage F) (earlier : Lis
   table.Assumptions → table.Constraints → (∀ s ∈ earlier, table.GuaranteesOn s) →
     table.RequirementsOn stage
 
+/-- `Table.RequirementsAfterOn` for every table of the component. -/
 def Component.RequirementsAfterOn (component : Component F) (stage : Stage F)
     (earlier : List (Stage F)) : Prop :=
   ∀ table : Table F, table.component = component → table.RequirementsAfterOn stage earlier
@@ -326,7 +332,8 @@ theorem guaranteesOn_of_stagedRequirementsOn {ens : Ensemble F PublicIO} {N : �
     · exact ih table h_table s h_s
 
 /--
-Soundness from the finishing order of stages. Every pull of every table lies in a finished stage;
+Soundness from the finishing order of stages. Every message of every channel a table has guarantees
+on lies in a finished stage;
 every finished stage's channel is consistent under the balance check; every component's
 requirements on a stage follow from its guarantees on the stages finished before it.
 -/

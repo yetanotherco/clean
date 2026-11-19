@@ -35,9 +35,11 @@ It also proves the basic row-level transport lemmas: instantiated component oper
 
 **Ensemble-level soundness** is more than a simple lifting of per-circuit soundness: it requires that channel guarantees, which were _assumed_ as part of local circuit proofs, are shown to hold unconditionally from global channel balance and constraints.
 
-The library currently provides two distinct arguments to establish soundness, covering two prominent ways of using channels:
+The library currently provides three distinct arguments to establish soundness, covering prominent ways of using channels:
 
 `OrderedChannel.lean` contains a staged channel construction for ordinary lookup-like channels. The defining property is a strict hierarchy on the list of component tables: any table that pushes to a channel must come before every table that pulls from it. From little more than this property, we prove ensemble-level soundness, as encapsulated in the `SoundEnsemble` structure. On the way, we introduce a relaxed notion of channel balance called `PartialBalancedChannel` that allows the balanced interaction list to contain additional interactions from tables added later. This makes it suitable for an inductive argument or gradual addition of tables to an existing sound ensemble.
+
+`StagedChannels.lean` orders channels, or classes of their messages, instead of tables: a table's requirements on a channel may follow from its guarantees on the channels finished before it, so a table may pull from a channel it also owes requirements on. It covers ensembles of tables with an empty verifier; `Clean/Examples/RangeCheckedCount.lean` is an example that `OrderedChannel.lean` cannot order.
 
 `Vm.lean` contains a construction aimed at "VM-like" components that perform one transition per row. Since VM components both pull from and push to one distinguished state channel, they cannot follow the theory of ordered lookup-channel soundness. Instead, we prove a dedicated soundness theorem that applies to a set of VM components added to an existing hierarchical ensemble; a typical modern zkVMs layout. `Clean/Examples/BinaryFibonacci` is a VM over the binary field GF(2^64), sound under multiset balance.
 
