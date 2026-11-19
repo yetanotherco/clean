@@ -13,14 +13,14 @@ public import Clean.Air.StagedChannels
 `CountedSquares` constrains its count arithmetically, which only scales to a small bound. Here a
 row needs a fact up to `255` times, pulls it once with that multiplicity, and range-checks the
 multiplicity by pulling it from a byte table. The requirement the counted pull owes,
-`count = 0 ∨ CountUpTo 255 count`, then follows from the row's guarantee on another channel, not
-from its constraints.
+`count = 0 ∨ CountUpTo 255 count`, then follows from the row's guarantee on `bytes`, not from its
+constraints.
 
 `OrderedChannel` cannot order this ensemble: the consumer both pulls from `doubles` and owes
 requirements on it, which `OrderedChannelRefl` rules out. A finishing order of channels can:
-`bytes` is finished before `doubles`, and the consumer's requirement on `doubles` uses its
-guarantee on `bytes`. The example proves `TableSoundness` through
-`Ensemble.tableSoundness_of_stagedRequirements`; its witness generation is not exercised.
+`tableSoundness` finishes `bytes` before `doubles` through
+`Ensemble.tableSoundness_of_stagedRequirements`. Witness generation is not exercised; each
+component declares one only because `Component` requires it.
 -/
 
 namespace RangeCheckedCount
@@ -65,12 +65,11 @@ lemma bytes_ne_doubles : (bytes (p := p)).channel.toRaw ≠ doubles.counted 255 
 structure DoublerInput (F : Type) where
   x : F
   y : F
-  /-- how many pulls this row answers -/
+  /-- how many pulls this row answers, counted with multiplicity -/
   mult : F
 deriving ProvableStruct
 
-/-- The doubling chip: constrains `y = x + x` and pushes the pair, which pays for the guarantee it
-owes on every active push. -/
+/-- The doubling chip: constrains `y = x + x`, which every active push of the pair owes. -/
 def doubler : GeneralFormalCircuit (F p) DoublerInput unit where
   name := "doubler"
   main input := do
@@ -86,7 +85,7 @@ def doubler : GeneralFormalCircuit (F p) DoublerInput unit where
     circuit_proof_start [doubles]
     simp_all
 
-/-- One row per distinct pair pulled from `doubles`, its multiplicity the number of pulls. -/
+/-- One row per distinct pair pulled from `doubles`, its multiplicity the total pulled count. -/
 abbrev doublerComponent : Component (F p) where
   circuit := doubler
   generation := .demand {
@@ -102,9 +101,8 @@ structure ConsumerInput (F : Type) where
   count : F
 deriving ProvableStruct
 
-/-- A row that needs `y = x + x` up to `255` times and pulls it once with that multiplicity. The
-pull from `bytes` is what makes the count a byte, and so what discharges the counted pull's
-requirement; no constraint of the row does. -/
+/-- A row that needs `y = x + x` up to `255` times and pulls it once with that multiplicity, which
+only its pull from `bytes` bounds. -/
 def consumer : GeneralFormalCircuit (F p) ConsumerInput unit where
   name := "consumer"
   main input := do
@@ -139,10 +137,9 @@ example :
     ¬ OrderedChannelRefl (doubles.counted 255 : RawChannel (F p)) (consumerComponent (p := p)) := by
   simp [circuit_norm, consumer]
 
-/-- The consumer's requirement on `doubles`, from its guarantee on `bytes`. This is the step a
-finishing order of channels adds: neither `Component.requirementsAfter_of_not_mem` nor
-`Component.requirementsAfter_of_guarantees_subset` gives it, since the consumer owes on `doubles`
-and has guarantees on `doubles` itself. -/
+/-- The consumer's requirement on `doubles`, from its guarantee on `bytes` alone. Neither
+`Component.requirementsAfter_of_not_mem` nor `Component.requirementsAfter_of_guarantees_subset`
+gives it: the consumer owes on `doubles` and has guarantees on it. -/
 theorem consumer_requirementsAfter : (consumerComponent (p := p)).RequirementsAfter
     (doubles.counted 255) [bytes.channel.toRaw] := by
   rintro table h_comp - - guarantees row h_row

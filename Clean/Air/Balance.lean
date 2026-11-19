@@ -212,8 +212,8 @@ lemma activeCount_filter_msg (interactions : List (Interaction F)) (cls : Array 
     rintro ⟨ -, rfl, - ⟩ h
     exact h_cls h
 
-/-- Restricting a balanced list to a class of messages keeps it balanced: every interaction
-carrying a message is kept or dropped together. -/
+/-- Restricting a balanced list to a class of messages keeps it balanced, since the interactions
+carrying a message are kept or dropped together. -/
 lemma BalancedUpTo.filter_msg {N : ℕ} {interactions : List (Interaction F)}
     (cls : Array F → Bool) (balanced : BalancedUpTo N interactions) :
     BalancedUpTo N (interactions.filter fun i => cls i.msg) := by
