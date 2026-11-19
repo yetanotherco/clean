@@ -53,8 +53,8 @@ def unpadded : Array (ComponentState (F p)) := Id.run do
       (completeRow provider #[2, 4, if i = 0 then 2 else 0] data hint)
   return #[consumer, provider]
 
-/-- The tail of `generateValid`, so that these states meet the same `constraintsHold` and
-`channelsBalanced` as `result` rather than a restatement of them. -/
+/-- The tail of `generateValid`, which assembles component states into a witness, so that these
+states are checked by the same `constraintsHold` and `channelsBalanced` as `result`. -/
 def witnessOf (states : List (ComponentState (F p))) :
     Except GenerationError (EnsembleWitness (soundEnsemble (p := p)).ensemble) := do
   let assembled ← assembleTables (soundEnsemble (p := p)).ensemble.tables states
