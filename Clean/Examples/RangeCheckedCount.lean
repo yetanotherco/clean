@@ -158,21 +158,65 @@ def ensemble : Ensemble (F p) unit where
   tables_channels := by simp [circuit_norm, consumer, doubler, bytes]
   verifier_channels := by simp [circuit_norm]
 
+/-- `bytes` finished before `doubles`. -/
+abbrev finished : List (RawChannel (F p)) := [doubles.counted 255, bytes.channel.toRaw]
+
+/-- Each component's requirements on `doubles` follow from its guarantees on `bytes`, and its
+requirements on `bytes` hold unconditionally. -/
+theorem stagedRequirements :
+    ∀ component ∈ (ensemble (p := p)).tables, component.StagedRequirements finished := by
+  simp only [ensemble, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
+    circuit_norm]
+  refine ⟨⟨consumer_requirementsAfter, Component.requirementsAfter_of_not_mem _
+      (by simp [circuit_norm, consumer, bytes_ne_doubles])⟩,
+    ⟨Component.requirementsAfter_of_guarantees_subset (by simp [circuit_norm, doubler]),
+      Component.requirementsAfter_of_not_mem _
+        (by simp [circuit_norm, doubler, bytes_ne_doubles])⟩,
+    ⟨Component.requirementsAfter_of_not_mem _ (by simp [circuit_norm, bytes_ne_doubles.symm]),
+      Component.requirementsAfter_of_guarantees_subset (by simp [circuit_norm])⟩⟩
+
 /-- Every table is sound under `Balance.logUpUpTo 255`, with `bytes` finished before `doubles`. -/
 theorem tableSoundness : (ensemble (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
-  apply Ensemble.tableSoundness_of_stagedRequirements [doubles.counted 255, bytes.channel.toRaw] rfl
-    (List.Subset.refl _)
+  apply Ensemble.tableSoundness_of_stagedRequirements finished (List.Subset.refl _)
+    (verifier_subset_finished := by simp [ensemble, circuit_norm, Verifier.Program.empty])
+    (verifier_no_requirements := by simp [ensemble, circuit_norm, Verifier.Program.empty])
+    (staged := stagedRequirements)
   · simp [ensemble, circuit_norm, consumer, doubler, bytes]
   · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance⟩
-  · simp only [ensemble, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
-      circuit_norm]
-    refine ⟨⟨consumer_requirementsAfter, Component.requirementsAfter_of_not_mem _
-        (by simp [circuit_norm, consumer, bytes_ne_doubles])⟩,
-      ⟨Component.requirementsAfter_of_guarantees_subset (by simp [circuit_norm, doubler]),
-        Component.requirementsAfter_of_not_mem _
-          (by simp [circuit_norm, doubler, bytes_ne_doubles])⟩,
-      ⟨Component.requirementsAfter_of_not_mem _ (by simp [circuit_norm, bytes_ne_doubles.symm]),
-        Component.requirementsAfter_of_guarantees_subset (by simp [circuit_norm])⟩⟩
+
+/-! ## With a verifier
+
+The same tables, with a verifier that pulls its public input from `bytes`. Its spec, that the input
+is a byte, is the guarantee of that pull, which the `bytes` stage gives it as it gives the tables
+theirs. -/
+
+/-- Pulls the public input from `bytes`. -/
+def byteVerifier : Verifier.Program (F p) field where
+  main x := Verifier.pull bytes.channel x
+  Spec x _ := x.val < 256
+  soundness := by simp_all [circuit_norm, bytes]
+
+/-- `ensemble` with `byteVerifier`. -/
+def ensembleWithVerifier : Ensemble (F p) field where
+  tables := (ensemble (p := p)).tables
+  unique_names := (ensemble (p := p)).unique_names
+  channels := (ensemble (p := p)).channels
+  unique_channel_names := (ensemble (p := p)).unique_channel_names
+  tables_channels := (ensemble (p := p)).tables_channels
+  verifier := byteVerifier
+  verifier_channels := by simp [ensemble, circuit_norm, byteVerifier, bytes]
+
+/-- The tables and the verifier's spec are sound under `Balance.logUpUpTo 255`. -/
+theorem tableSoundness_withVerifier :
+    (ensembleWithVerifier (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
+  apply Ensemble.tableSoundness_of_stagedRequirements (ens := ensembleWithVerifier) finished
+    (List.Subset.refl _)
+    (verifier_subset_finished := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
+    (verifier_no_requirements := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
+    (staged := stagedRequirements)
+  · simp [ensembleWithVerifier, ensemble, circuit_norm, consumer, doubler, bytes]
+  · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
+    exact ⟨inferInstance, inferInstance⟩
 
 end RangeCheckedCount
