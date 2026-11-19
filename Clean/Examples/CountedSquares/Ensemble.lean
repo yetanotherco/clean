@@ -16,22 +16,30 @@ The fact here is `y = x * x`. The squaring chip enforces it with a constraint an
 a consumer that needs the same square once or twice pulls it once with that multiplicity.
 `squares.counted 2` hands its guarantee to a pull of multiplicity `1` or `2`, and asks such a pull
 to say which. That obligation is what the consumer discharges by constraining its count, and it is
-what makes the channel sound: `Channel.counted_not_consistent` shows that a row free to claim any
-multiplicity would break it.
+what makes the channel sound: a row free to claim any multiplicity could pull at `-1`, which the
+field sums count as a push of a pair nobody checked. The balance check is the other half: under the
+plain `BalancedInteractions` premise the counted channel is not consistent even when every pull
+meets its obligation (`Channel.counted_not_consistent`), which is why the ensemble uses
+`Balance.logUpUpTo`.
 
 The ensemble also generates. Four provider rows exist before any demand, and a multiplicity cell
 starts at `0`, so the `+ 1` of the provider's emit turns each of them into one push. Those four
 pushes are the demand the consumer answers, with two rows pulling at multiplicity `2`. The `+ 1` is
 there to seed the run and nothing else: a VM seeds its channels from the verifier instead, as in
-`Clean/Examples/FemtoCairo/FlatAir.lean`. `Clean/Examples/CountedSquaresWitnessGenerationTest.lean`
+`Clean/Examples/FemtoCairo/FlatAir.lean`. `Clean/Examples/CountedSquares/WitnessGenerationTest.lean`
 runs it and pins the result.
 
 A row's multiplicity is counted by `Tally.signedCount`, which reads it as a natural number, so a
 counted pull is tallied as the number it claims; that part needs no change for counted channels.
 
+Witness generation does not split a row at `N`. A demand component that counts its demand in a
+multiplicity cell keeps one row per message (`DemandMode.answer`), so if it also pulls with that
+count, a message demanded more than `N` times gets a row whose counted pull fails its constraint.
+The consumer here avoids that by pulling a fixed count per row.
+
 Constraining the count arithmetically only scales for a small bound. A circuit counting to `510`
-would range-check its multiplicity on another channel instead, which needs the finishing order of
-`Ensemble.tableSoundness_of_stagedOn` rather than the single finished channel here.
+would range-check its multiplicity on another channel instead, which needs a finishing order over
+several channels rather than the single finished channel here.
 -/
 
 namespace CountedSquares
@@ -50,7 +58,8 @@ def squares : Channel (F p) (ProvablePair field field) where
 
 /-- A count of `1` or `2` is a count up to `2`: the step from a field constraint to the channel's
 `CountUpTo`, and the only arithmetic the example needs. -/
-lemma countUpTo_of_one_or_two {c : F p} (h : (c - 1) * (c - 2) = 0) : CountUpTo N c := by
+lemma countUpTo_of_sub_one_mul_sub_two_eq_zero {c : F p} (h : (c - 1) * (c - 2) = 0) :
+    CountUpTo N c := by
   rcases mul_eq_zero.mp h with h | h <;> rw [sub_eq_zero] at h
   · exact ⟨1, le_rfl, by norm_num, by simp [h]⟩
   · exact ⟨2, by norm_num, le_rfl, by simp [h]⟩
@@ -110,12 +119,12 @@ def consumer : GeneralFormalCircuit (F p) ConsumerInput unit where
   requirementsChannelsLawful := by
     simp only [circuit_norm, seval]
     intro input env h
-    exact .inr (countUpTo_of_one_or_two h)
+    exact .inr (countUpTo_of_sub_one_mul_sub_two_eq_zero h)
 
   soundness := by
     circuit_proof_start [squares]
     obtain ⟨h_count, h_guarantee⟩ := h_holds
-    have h_in := countUpTo_of_one_or_two h_count
+    have h_in := countUpTo_of_sub_one_mul_sub_two_eq_zero h_count
     exact ⟨h_guarantee h_in, .inr h_in⟩
   completeness := by
     circuit_proof_start [squares]
@@ -142,13 +151,22 @@ abbrev providerComponent : Component (F p) where
 
 /-- One consumer row per pushed square that nothing has pulled, each needing it twice. Two rows
 answer the provider's four pushes. Their `x` and `y` come from the message, so what makes
-`y = x * x` true of a consumer row is the channel and the provider's constraint, nothing local. -/
+`y = x * x` true of a consumer row is the channel and the provider's constraint, nothing local.
+
+Rows of this component are meant to be active: away from characteristic `2`, the default padding
+of `0` does not satisfy its one constraint, `(count - 1) * (count - 2) = 0`. The padding row given
+here pulls at multiplicity `1` the one message the provider ever pushes, and the generator answers
+that extra pull by raising a provider multiplicity, as it does for any interacting padding row. The
+generation test's own run has a power-of-two height and so never pads; its second scenario drives
+the padding directly. A chip whose rows may be idle would take the `count = 0` branch of the pull's
+requirement rather than pad with an active row. -/
 abbrev consumerComponent : Component (F p) where
   circuit := consumer
   generation := .demand {
     channel := squares
     trigger := .push
     input | (x, y) => pure { x, y, count := .witness 2 }
+    padding := { x := 2, y := 4, count := 1 }
   }
 
 /-- The ensemble: the counted channel, the chip that serves it, the channel finished, and the chip

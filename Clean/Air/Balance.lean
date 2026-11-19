@@ -41,8 +41,13 @@ lemma countUpTo_one_iff {mult : F} : CountUpTo 1 mult ↔ mult = 1 := by
     exact ⟨1, le_rfl, le_rfl, by simp [h]⟩
 
 omit [FiniteField F] in
-/-- A nonzero multiplicity whose value is at most `N`. -/
-lemma countUpTo_of_val {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
+/-- A nonzero multiplicity whose value is at most `N`.
+
+This is how a circuit discharges the requirement of a counted pull. The pull owes
+`mult = 0 ∨ CountUpTo N mult`. A chip that range-checks its multiplicity knows `mult.val ≤ N`,
+and once the `mult = 0` case is split off it also has `mult ≠ 0`. Stating it over `ZMod p` rather
+than a general field is what makes `mult.val` available. -/
+lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
     (ZMod.natCast_zmod_val mult).symm ⟩
@@ -411,14 +416,21 @@ theorem LogUpBalanced.matchedUpTo {N : ℕ} {interactions : List (Interaction F)
   omega
 
 /--
-The bound of `matchedUpTo` is necessary, not an artifact of its proof: once the number of
-interactions times `N` reaches the characteristic, the multiplicities of the pulls of a message can
-add up to a multiple of it, and the field sums see a balanced list in which nothing was pushed.
+The bound of `matchedUpTo` is not an artifact of its proof: a bound on the number of interactions
+alone, which is all `Balance.logUp` asks, accepts lists in which a pull of multiplicity up to `N`
+is matched by no push.
 
-Two pulls, of multiplicities `N` and `ringChar F - N`, are such a list whenever `N < ringChar F`
-and `ringChar F ≤ 2 * N`: both multiplicities count up to `N`, they sum to the characteristic, and
-a list of length `2` passes a bound on the length alone, which is all `Balance.logUp` asks. This is
-what `Balance.logUpUpTo N` rules out by asking for `count * N < ringChar F` as well.
+Two pulls, of multiplicities `N` and `ringChar F - N`, are such a list whenever `2 ≤ N`,
+`N < ringChar F` and `ringChar F ≤ 2 * N`: both multiplicities count up to `N`, they sum to the
+characteristic, and a list of length `2` passes a bound on the length alone. This is what
+`Balance.logUpUpTo N` rules out by asking for `count * N < ringChar F` as well.
+
+What this covers, and what it does not: `ringChar F ≤ 2 * N` bounds the characteristic, not the
+number of elements, and bounds it in terms of `N`. The shape does generalize, since `L`
+multiplicities in `[1, N]` reach every sum between `L` and `L * N`, so any field with
+`L < ringChar F ≤ L * N` admits the same counterexample on `L` interactions; the inequality is
+strict because at `L = ringChar F` the list no longer passes a bound on the length alone. That
+version is not proved here.
 -/
 theorem exists_logUpBalanced_not_matchedUpTo {N : ℕ} (hN : 2 ≤ N) (h_lt : N < ringChar F)
     (h_le : ringChar F ≤ 2 * N) (channel : RawChannel F) (msg : Array F)
@@ -460,19 +472,21 @@ def Balance.logUp [ComputableRingChar F] : Balance F where
     have length_lt := ComputableRingChar.char_eq (R := F) ▸ of_decide_eq_true fits
     ⟨ balanced.exists_push_of_pull length_lt,
       balanced.activeCount_push_eq_activeCount_pull_of_isBool length_lt ⟩
-  matchedUpTo_of_balanced _ fits balanced _ :=
-    have length_lt := ComputableRingChar.char_eq (R := F) ▸ of_decide_eq_true fits
-    balanced.matchedUpTo (by simpa using length_lt)
 
-/-- `Balance.logUp` matches pulls of multiplicity `1` only. Stated so that `simp`/`circuit_norm`
-can reduce a `ConsistentUpTo (Balance.logUp).pullBound` goal, which instance search cannot do on
-its own: `Balance.logUp` is a plain `def`, so the projection is not reducible. -/
-@[simp, circuit_norm] lemma Balance.logUp_pullBound [ComputableRingChar F] :
+/-- `Balance.logUp` matches pulls of multiplicity `1` only. Stated so that `circuit_norm` can reduce
+a `ConsistentUpTo (Balance.logUp).pullBound` goal, which instance search cannot do on its own:
+`Balance.logUp` is a plain `def`, so the projection is not reducible. -/
+@[circuit_norm] lemma Balance.logUp_pullBound [ComputableRingChar F] :
     (Balance.logUp : Balance F).pullBound = 1 := rfl
 
 /--
 LogUp with counted pulls: field sums, sound for interaction counts whose product with `N` is below
 the characteristic, so that pulls of multiplicity up to `N` are matched by a push.
+
+The bound applies to every channel of an ensemble, counted or not. `fits` sees only a count, and
+`Ensemble.interactionsFit` applies it to each channel, so a channel whose pulls all have
+multiplicity `1` is also asked for `count * N < ringChar F`, where `Balance.logUp` would ask it only
+for `count < ringChar F`. A bound that varies with the channel is left as follow-up.
 
 Reducible so that instance search can project `pullBound` out of it.
 `SoundEnsemble.markFinished` takes `[channel.ConsistentUpTo balance.pullBound]` as an instance
@@ -494,10 +508,10 @@ argument leaves no place to `simp` first.
       (of_decide_eq_true (Bool.and_eq_true_iff.mp fits).2)
     balanced.matchedUpTo length_mul_lt
 
-/-- `Balance.logUpUpTo N` matches pulls of multiplicity up to `N`, for `simp` and `circuit_norm`.
-Instance search needs the same fact, and gets it from the check being `@[reducible]`: a `simp`
-lemma plays no part in synthesis. -/
-@[simp, circuit_norm] lemma Balance.logUpUpTo_pullBound [ComputableRingChar F] (N : ℕ) :
+/-- `Balance.logUpUpTo N` matches pulls of multiplicity up to `N`, for `circuit_norm`. Instance
+search needs the same fact, and gets it from the check being `@[reducible]`: a simplification lemma
+plays no part in synthesis. -/
+@[circuit_norm] lemma Balance.logUpUpTo_pullBound [ComputableRingChar F] (N : ℕ) :
     (Balance.logUpUpTo N : Balance F).pullBound = N := rfl
 
 /-- At bound `1`, the counted check is `Balance.logUp` itself, so an ensemble that does not count
@@ -541,7 +555,7 @@ def Balance.multiset : Balance F where
   -- `matchedUpTo_of_balanced` is the default: `pullBound` is `1`.
 
 /-- `Balance.multiset` matches pulls of multiplicity `1` only. -/
-@[simp, circuit_norm] lemma Balance.multiset_pullBound :
+@[circuit_norm] lemma Balance.multiset_pullBound :
     (Balance.multiset : Balance F).pullBound = 1 := rfl
 
 /- ## Conditions on channels that strengthen the implications of interaction balance. -/
