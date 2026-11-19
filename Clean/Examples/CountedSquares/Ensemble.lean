@@ -33,7 +33,8 @@ demanded more than `N` times would get a row whose counted pull fails its constr
 here pulls a fixed count per row instead.
 
 For a large `N`, a chip would range-check its count on another channel rather than constrain it
-with a polynomial, which needs several channels finished in order rather than the single one here.
+with a polynomial, which needs several channels finished in order rather than the single one here,
+as in `Clean/Examples/RangeCheckedCount.lean`.
 -/
 
 namespace CountedSquares
