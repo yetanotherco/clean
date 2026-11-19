@@ -23,7 +23,7 @@ The ensemble also generates. Four provider rows exist before any demand, and a m
 starts at `0`, so the `+ 1` of the provider's emit turns each of them into one push. Those four
 pushes are the demand the consumer answers, with two rows pulling at multiplicity `2`. The `+ 1` is
 there to seed the run and nothing else: a VM seeds its channels from the verifier instead, as in
-`Clean/Examples/FemtoCairo/FlatAir.lean`. `Clean/Examples/CountedSquaresWitnessGenerationTest.lean`
+`Clean/Examples/FemtoCairo/FlatAir.lean`. `Clean/Examples/CountedSquares/WitnessGenerationTest.lean`
 runs it and pins the result.
 
 A row's multiplicity is counted by `Tally.signedCount`, which reads it as a natural number, so a

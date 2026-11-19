@@ -1,9 +1,9 @@
 module
 
-public import Clean.Examples.CountedSquares
+public import Clean.Examples.CountedSquares.Ensemble
 
 -- `native_decide` runs compiled code from this module.
-public meta import Clean.Examples.CountedSquares
+public meta import Clean.Examples.CountedSquares.Ensemble
 
 @[expose] public section
 
