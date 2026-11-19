@@ -44,9 +44,9 @@ omit [FiniteField F] in
 /-- A nonzero multiplicity whose value is at most `N`.
 
 This is how a circuit discharges the requirement of a counted pull. The pull owes
-`mult = 0 ∨ CountUpTo N mult`, and a chip that range-checks its multiplicity knows exactly
-`mult ≠ 0` and `mult.val ≤ N`. Stating it over `ZMod p` rather than a general field is what makes
-`mult.val` available. -/
+`mult = 0 ∨ CountUpTo N mult`. A chip that range-checks its multiplicity knows `mult.val ≤ N`,
+and once the `mult = 0` case is split off it also has `mult ≠ 0`. Stating it over `ZMod p` rather
+than a general field is what makes `mult.val` available. -/
 lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
@@ -380,10 +380,10 @@ The bound of `matchedUpTo` is not an artifact of its proof: a bound on the numbe
 alone, which is all `Balance.logUp` asks, accepts lists in which a pull of multiplicity up to `N`
 is matched by no push.
 
-Two pulls, of multiplicities `N` and `ringChar F - N`, are such a list whenever `N < ringChar F`
-and `ringChar F ≤ 2 * N`: both multiplicities count up to `N`, they sum to the characteristic, and
-a list of length `2` passes a bound on the length alone. This is what `Balance.logUpUpTo N` rules
-out by asking for `count * N < ringChar F` as well.
+Two pulls, of multiplicities `N` and `ringChar F - N`, are such a list whenever `2 ≤ N`,
+`N < ringChar F` and `ringChar F ≤ 2 * N`: both multiplicities count up to `N`, they sum to the
+characteristic, and a list of length `2` passes a bound on the length alone. This is what
+`Balance.logUpUpTo N` rules out by asking for `count * N < ringChar F` as well.
 
 What this covers, and what it does not: `ringChar F ≤ 2 * N` bounds the characteristic, not the
 number of elements, and bounds it in terms of `N`. The shape does generalize, since `L`
@@ -442,6 +442,11 @@ a `ConsistentUpTo (Balance.logUp).pullBound` goal, which instance search cannot 
 /--
 LogUp with counted pulls: field sums, sound for interaction counts whose product with `N` is below
 the characteristic, so that pulls of multiplicity up to `N` are matched by a push.
+
+The bound applies to every channel of an ensemble, counted or not. `fits` sees only a count, and
+`Ensemble.interactionsFit` applies it to each channel, so a channel whose pulls all have
+multiplicity `1` is also asked for `count * N < ringChar F`, where `Balance.logUp` would ask it only
+for `count < ringChar F`. A bound that varies with the channel is left as follow-up.
 
 Reducible so that instance search can project `pullBound` out of it.
 `SoundEnsemble.markFinished` takes `[channel.ConsistentUpTo balance.pullBound]` as an instance

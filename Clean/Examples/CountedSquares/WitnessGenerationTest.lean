@@ -11,8 +11,8 @@ namespace CountedSquares.WitnessGenerationTest
 
 open Air.Flat Air.Flat.WitnessGeneration
 
-/-- A field small enough to run in, and large enough for the bound: the runs below make `6` and
-`8` interactions on the channel, and `Balance.logUpUpTo 2` asks for `8 * 2 < 101`. -/
+/-- A field small enough to run in, and large enough for the bound: the runs below make `6`, `7`
+and `8` interactions on the channel, and `Balance.logUpUpTo 2` asks for `8 * 2 < 101`. -/
 abbrev p : ℕ := 101
 
 instance : Fact (Nat.Prime p) := ⟨by decide⟩
@@ -33,9 +33,9 @@ example : result = .ok ([2, 4], true, true, true) := by native_decide
 
 /-! ## The padding row
 
-`result` never pads, because its consumer table has two rows. The scenarios below exercise
-`ComponentState.pad` and the rebalancing that follows it, from a balanced state whose consumer
-holds three rows.
+`result` never pads, because its consumer table has two rows. The scenarios below start from a
+balanced state whose consumer holds three rows, check it as it stands, and then run
+`ComponentState.pad` and the rebalancing that follows it.
 -/
 
 /-- Three consumer rows, each pulling the square twice, and four provider rows emitting six pushes

@@ -12,7 +12,8 @@ A table that answers `k` identical lookups with one row pulls the facts it relie
 multiplicity `k`. `Channel.counted N channel` is `channel` with pulls of multiplicity up to `N`: such
 a pull gets the guarantee, and an active push owes it. It is consistent in the sense of
 `RawChannel.ConsistentUpTo N`, so it can be finished in a `SoundEnsemble` whose balance check has a
-`pullBound` of at least `N`, e.g. `Balance.logUpUpTo N`.
+`pullBound` of at least `N`, e.g. `Balance.logUpUpTo N`: at exactly `N` by instance, above it
+through `counted_consistentUpTo_of_le`.
 -/
 
 variable {F : Type} [FiniteField F]
@@ -32,9 +33,11 @@ namespace Channel
 The name is kept, so `channel.toRaw`, `channel.counted 2` and `channel.counted 3` may denote
 different `RawChannel`s under one name. That is deliberate: witness generation tallies
 interactions by channel name, and `DemandMode` and `PreallocatedMode` take the plain `Channel`, so
-a counted channel under a new name would silently stop generating rows. An `Ensemble` asks the
-names of its channels to be distinct, so use one raw-channel value per name: a second entry under
-a name already taken fails `unique_channel_names`. -/
+under a new name no component would answer the counted channel's interactions, and generation would
+fail with `unhandledImbalance`. An `Ensemble` asks the names of its channels to be distinct, so use
+one raw-channel value per name: a second entry under a name already taken fails the `fresh`
+argument of `SoundEnsemble.addChannel`, or `unique_channel_names` for an `Ensemble` built
+directly. -/
 def counted (N : ℕ) (channel : Channel F Message) : RawChannel F where
   name := channel.name
   arity := size Message
@@ -185,9 +188,9 @@ example [ComputableRingChar F] (N : ℕ) (channel : Channel F Message) :
 A theorem and not an instance. The instance above fixes the channel's own `N` on both sides, so
 synthesis closes `ConsistentUpTo N` for a channel counted at `N` and nothing else. An ensemble
 that finishes a channel counted at `N` under a check whose `pullBound` is a larger `M` has to
-supply this theorem with `haveI` before calling `SoundEnsemble.markFinished`, which takes the
-consistency as an instance argument and leaves no place for a `simp` step. As an instance this
-would send synthesis looking for an `N ≤ M` on every goal of the shape. -/
+supply this theorem itself, with `haveI` before calling `SoundEnsemble.markFinished` or as its
+explicit argument through `@`, since `markFinished` takes the consistency as an instance argument.
+As an instance this would send synthesis looking for an `N ≤ M` on every goal of the shape. -/
 theorem counted_consistentUpTo_of_le {M N : ℕ} (h : N ≤ M) (channel : Channel F Message) :
     (channel.counted N).ConsistentUpTo M where
   consistent interactions data balanced :=
