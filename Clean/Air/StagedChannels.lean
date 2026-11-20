@@ -270,7 +270,7 @@ lemma verifierRequirementsAfterOn_of_not_mem {ens : Ensemble F PublicIO} {stage 
     ens.VerifierRequirementsAfterOn stage earlier := by
   intro data _ i h_i _
   have := ens.verifierChannelRequirements_of_not_mem data h
-  rw [Ensemble.VerifierChannelRequirements, Operations.ChannelRequirements,
+  rw [VerifierChannelRequirements, Operations.ChannelRequirements,
     ← Operations.forall_interactionsWith_iff] at this
   rw [Operations.interactionValuesWith_eq_map] at h_i
   obtain ⟨i', h_i', rfl⟩ := List.mem_map.mp h_i
