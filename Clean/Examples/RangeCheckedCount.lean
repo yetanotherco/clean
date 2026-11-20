@@ -188,7 +188,7 @@ theorem guarantees_subset_finished : ∀ component ∈ (ensemble (p := p)).table
 theorem tableSoundness : (ensemble (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
   apply Ensemble.tableSoundness_of_stagedRequirements finished (List.Subset.refl _)
     (verifier_subset_finished := by simp [ensemble, circuit_norm, Verifier.Program.empty])
-    (verifier_no_requirements := by simp [ensemble, circuit_norm, Verifier.Program.empty])
+    (verifier_staged := Ensemble.verifierStagedRequirementsOn_of_verifier_empty rfl _)
     (staged := stagedRequirements) guarantees_subset_finished
   · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance⟩
@@ -221,7 +221,8 @@ theorem tableSoundness_withVerifier :
   apply Ensemble.tableSoundness_of_stagedRequirements (ens := ensembleWithVerifier) finished
     (List.Subset.refl _)
     (verifier_subset_finished := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
-    (verifier_no_requirements := by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes])
+    (verifier_staged := Ensemble.verifierStagedRequirementsOn_of_not_mem
+      (by simp [ensembleWithVerifier, circuit_norm, byteVerifier, bytes]))
     (staged := stagedRequirements) guarantees_subset_finished
   · simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance⟩
@@ -230,8 +231,9 @@ theorem tableSoundness_withVerifier :
 
 A verifier's push owes the channel's guarantee for a value of the public input, which holds only if
 something establishes it. Here the verifier first pulls its input from `bytes`, then pushes it to
-`seenBytes`, whose guarantee is that the value is a byte: its requirement on the `seenBytes` stage
-follows from its guarantee on the earlier `bytes` stage, as a table's would. -/
+`seenBytes`, whose guarantee is that the value is a byte, and a table pulls it from there. That
+table's spec rests on the verifier's push, whose requirement on the `seenBytes` stage follows from
+its guarantee on the earlier `bytes` stage, as a table's would. -/
 
 /-- Values known to be bytes. -/
 def seenBytes : Channel (F p) field where
@@ -255,14 +257,41 @@ def forwardingVerifier : Verifier.Program (F p) field where
   Spec x _ := x.val < 256
   soundness := by simp_all [circuit_norm, bytes]
 
-/-- `ensemble` with `forwardingVerifier`, and the channel it pushes to. -/
+/-- Pulls a value from `seenBytes`, and so knows it is a byte. -/
+def seenReader : GeneralFormalCircuit (F p) field unit where
+  name := "seen-reader"
+  main x := seenBytes.pull x
+  Spec x _ _ := x.val < 256
+  ProverAssumptions x _ _ := x.val < 256
+  soundness := by
+    circuit_proof_start [seenBytes]
+    simp_all
+  completeness := by
+    circuit_proof_start [seenBytes]
+    exact h_assumptions
+
+/-- One row per value pushed to `seenBytes` that nothing has pulled. -/
+abbrev seenReaderComponent : Component (F p) where
+  circuit := seenReader
+  generation := .demand {
+    trigger := .push
+    channel := seenBytes
+    input x := pure x
+  }
+
+/-- `ensemble` with `seenReaderComponent`, `forwardingVerifier`, and the channel between them. -/
 def ensembleWithForwardingVerifier : Ensemble (F p) field where
-  tables := (ensemble (p := p)).tables
-  unique_names := (ensemble (p := p)).unique_names
+  tables := seenReaderComponent :: (ensemble (p := p)).tables
+  unique_names := by simp [ensemble, circuit_norm, seenReader, consumer, doubler, bytes]
   channels := seenBytes.toRaw :: (ensemble (p := p)).channels
   unique_channel_names := by simp [ensemble, circuit_norm, bytes, doubles, seenBytes]
-  tables_channels := fun table h => List.Subset.trans ((ensemble (p := p)).tables_channels table h)
-    (List.subset_cons_self _ _)
+  tables_channels := by
+    intro table h
+    simp only [List.mem_cons] at h
+    rcases h with rfl | h
+    · simp [circuit_norm, seenReader]
+    · exact List.Subset.trans ((ensemble (p := p)).tables_channels table h)
+        (List.subset_cons_self _ _)
   verifier := forwardingVerifier
   verifier_channels := by simp [ensemble, circuit_norm, forwardingVerifier, bytes, seenBytes]
 
@@ -270,15 +299,22 @@ def ensembleWithForwardingVerifier : Ensemble (F p) field where
 abbrev stages : List (Stage (F p)) :=
   { channel := seenBytes.toRaw } :: finished.map fun channel => { channel }
 
-/-- Sound under `Balance.logUpUpTo 255`. The verifier's push to `seenBytes` is paid for by its pull
-from `bytes`, finished earlier. -/
+/-- Sound under `Balance.logUpUpTo 255`. The reader's spec comes from the verifier's push to
+`seenBytes`, which is paid for by the verifier's pull from `bytes`, finished earlier. -/
 theorem tableSoundness_withForwardingVerifier :
     (ensembleWithForwardingVerifier (p := p)).TableSoundness (Balance.logUpUpTo 255) := by
   apply Ensemble.tableSoundness_of_stagedRequirementsOn (ens := ensembleWithForwardingVerifier)
     stages
   · simp [ensembleWithForwardingVerifier, ensemble]
-  · exact fun table h c h_c _ _ _ => ⟨{ channel := c }, List.mem_cons_of_mem _
-      (List.mem_map_of_mem (guarantees_subset_finished _ h h_c)), rfl, rfl⟩
+  · intro table h c h_c _ _ _
+    simp only [ensembleWithForwardingVerifier, List.mem_cons] at h
+    rcases h with h | h
+    · rw [h] at h_c
+      simp [circuit_norm, seenReader] at h_c
+      subst h_c
+      exact ⟨{ channel := seenBytes.toRaw }, List.mem_cons_self, rfl, rfl⟩
+    · exact ⟨{ channel := c }, List.mem_cons_of_mem _
+        (List.mem_map_of_mem (guarantees_subset_finished _ h h_c)), rfl, rfl⟩
   · intro c h_c _ _ _ _
     simp [ensembleWithForwardingVerifier, circuit_norm, forwardingVerifier, bytes] at h_c
     subst h_c
@@ -288,10 +324,15 @@ theorem tableSoundness_withForwardingVerifier :
       or_false, forall_eq_or_imp, forall_eq]
     exact ⟨inferInstance, inferInstance, inferInstance⟩
   · intro component h
+    simp only [ensembleWithForwardingVerifier, List.mem_cons] at h
+    rcases h with rfl | h
+    · -- the reader owes nothing anywhere: its one pull has multiplicity `1`
+      simp only [stages, finished, List.map_cons, List.map_nil, circuit_norm]
+      refine ⟨?_, ?_, ?_⟩ <;> exact Component.requirementsAfterOn_of_not_mem _
+        (by simp [circuit_norm, seenReader])
     refine ⟨Component.requirementsAfterOn_of_not_mem _ ?_,
       Component.stagedRequirementsOn_of_stagedRequirements (stagedRequirements component h)⟩
-    simp only [ensembleWithForwardingVerifier, ensemble, List.mem_cons, List.not_mem_nil,
-      or_false] at h
+    simp only [ensemble, List.mem_cons, List.not_mem_nil, or_false] at h
     rcases h with rfl | rfl | rfl
     · simp [circuit_norm, consumer, seenBytes_ne_doubles]
     · simp [circuit_norm, doubler, seenBytes_ne_doubles]

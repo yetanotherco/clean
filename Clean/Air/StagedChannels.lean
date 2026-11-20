@@ -286,6 +286,13 @@ lemma verifierStagedRequirementsOn_of_not_mem {ens : Ensemble F PublicIO} :
     ⟨ verifierRequirementsAfterOn_of_not_mem _ (h _ List.mem_cons_self),
       verifierStagedRequirementsOn_of_not_mem fun s hs => h s (List.mem_cons_of_mem _ hs) ⟩
 
+/-- An empty verifier owes nothing on any stage. -/
+lemma verifierStagedRequirementsOn_of_verifier_empty {ens : Ensemble F PublicIO}
+    (h : ens.verifier = .empty F PublicIO) (finished : List (Stage F)) :
+    ens.VerifierStagedRequirementsOn finished :=
+  verifierStagedRequirementsOn_of_not_mem fun _ _ => by
+    simp [h, circuit_norm, Verifier.Program.empty]
+
 /-- Every table's and the verifier's guarantees on each finished stage hold, by induction from the
 oldest stage. -/
 theorem guaranteesOn_of_stagedRequirementsOn {ens : Ensemble F PublicIO} {N : ℕ}
@@ -381,10 +388,12 @@ theorem tableSoundness_of_stagedRequirementsOn {ens : Ensemble F PublicIO} {bala
 
 /--
 Table soundness from a finishing order of channels: every channel a table or the verifier has
-guarantees on is finished, every finished channel is consistent under the balance check, every
-component's requirements on a finished channel follow from its guarantees on the channels finished
-before it, and the verifier pushes to no finished channel. This is
-`tableSoundness_of_stagedRequirementsOn` with each channel as a whole-channel stage.
+guarantees on is finished, every finished channel is consistent under the balance check, and the
+requirements of every component and of the verifier on a finished channel follow from their
+guarantees on the channels finished before it. This is `tableSoundness_of_stagedRequirementsOn`
+with each channel as a whole-channel stage. A verifier that pushes to no finished channel owes
+nothing (`verifierStagedRequirementsOn_of_not_mem`), and an empty one in particular
+(`verifierStagedRequirementsOn_of_verifier_empty`).
 -/
 theorem tableSoundness_of_stagedRequirements {ens : Ensemble F PublicIO} {balance : Balance F}
     (finished : List (RawChannel F))
@@ -392,10 +401,9 @@ theorem tableSoundness_of_stagedRequirements {ens : Ensemble F PublicIO} {balanc
     (subset_finished : ∀ component ∈ ens.tables,
       component.circuit.channelsWithGuarantees ⊆ finished)
     (verifier_subset_finished : ens.verifier.channelsWithGuarantees ⊆ finished)
-    (verifier_no_requirements : ∀ channel ∈ finished,
-      channel ∉ ens.verifier.channelsWithRequirements)
     (consistent : ∀ channel ∈ finished, channel.ConsistentUpTo balance.pullBound)
-    (staged : ∀ component ∈ ens.tables, component.StagedRequirements finished) :
+    (staged : ∀ component ∈ ens.tables, component.StagedRequirements finished)
+    (verifier_staged : ens.VerifierStagedRequirementsOn (finished.map fun channel => { channel })) :
     ens.TableSoundness balance :=
   tableSoundness_of_stagedRequirementsOn (finished.map fun channel => { channel })
     (by simpa using fun _ h => finished_subset h)
@@ -405,7 +413,7 @@ theorem tableSoundness_of_stagedRequirements {ens : Ensemble F PublicIO} {balanc
       rfl, rfl⟩)
     (by simpa using consistent)
     (fun component h => Component.stagedRequirementsOn_of_stagedRequirements (staged component h))
-    (verifierStagedRequirementsOn_of_not_mem (by simpa using verifier_no_requirements))
+    verifier_staged
 
 end Ensemble
 end Air.Flat
