@@ -48,9 +48,11 @@ This is how a circuit discharges the requirement of a counted pull. The pull owe
 `mult ≠ 0` and `mult.val ≤ N`. Stating it over `ZMod p` rather than a general field is what makes
 `mult.val` available.
 
-No example in this repo takes that route, because the bound there is `2`, which a constraint pins
-more cheaply than a lookup does. The route pays off once the bound is a byte and the range check is
-a table the circuit pulls anyway, which is how the arithmetic chips of lambda_vm discharge it. -/
+`Clean/Examples/RangeCheckedCount` range-checks a multiplicity this way, by its `.val` against a
+byte table, and `Clean/Examples/StagedSquares` does it by pulling a channel that guarantees
+`CountUpTo` instead, which is cheaper at the bound of `2` it uses. The `.val` route pays off once
+the bound is a byte and the range check is a table the circuit pulls anyway, which is how the
+arithmetic chips of lambda_vm discharge it. -/
 lemma countUpTo_of_ne_zero_of_val_le {p : ℕ} [Fact p.Prime] {N : ℕ} {mult : ZMod p} (h0 : mult ≠ 0)
     (hN : mult.val ≤ N) : CountUpTo N mult :=
   ⟨ mult.val, Nat.one_le_iff_ne_zero.mpr ((ZMod.val_ne_zero mult).mpr h0), hN,
@@ -195,6 +197,47 @@ lemma balancedUpTo_one_iff {interactions : List (Interaction F)} :
     BalancedUpTo 1 interactions ↔ BalancedInteractions interactions :=
   ⟨ fun balanced => balanced.toBalancedInteractions,
     fun balanced => ⟨ balanced, balanced.matchedUpTo_one ⟩ ⟩
+
+/-- Filtering by a class of messages keeps the active count of a message in the class and zeroes
+it outside. -/
+lemma activeCount_filter_msg (interactions : List (Interaction F)) (cls : Array F → Bool)
+    (direction : Channel.Direction) (msg : Array F) :
+    activeCount (interactions.filter fun i => cls i.msg) direction msg =
+      if cls msg then activeCount interactions direction msg else 0 := by
+  simp only [activeCount, List.countP_filter]
+  split_ifs with h_cls
+  · apply List.countP_congr
+    intro i _
+    simp only [Bool.and_eq_true, decide_eq_true_eq]
+    constructor
+    · exact fun h => h.1
+    · exact fun h => ⟨ h, h.2.1 ▸ h_cls ⟩
+  · rw [List.countP_eq_zero]
+    intro i _
+    simp only [Bool.and_eq_true, decide_eq_true_eq, not_and]
+    rintro ⟨ -, rfl, - ⟩ h
+    exact h_cls h
+
+/-- Restricting a balanced list to a class of messages keeps it balanced: every interaction
+carrying a message is kept or dropped together. -/
+lemma BalancedUpTo.filter_msg {N : ℕ} {interactions : List (Interaction F)}
+    (cls : Array F → Bool) (balanced : BalancedUpTo N interactions) :
+    BalancedUpTo N (interactions.filter fun i => cls i.msg) := by
+  refine ⟨ ⟨ ?_, ?_ ⟩, ?_ ⟩
+  · intro a a_mem a_pull
+    obtain ⟨ a_mem, a_cls ⟩ := List.mem_filter.mp a_mem
+    obtain ⟨ b, b_mem, b_msg, b_push ⟩ := balanced.exists_push_of_pull a a_mem a_pull
+    exact ⟨ b, List.mem_filter.mpr ⟨ b_mem, b_msg ▸ a_cls ⟩, b_msg, b_push ⟩
+  · intro msg is_bool
+    rw [activeCount_filter_msg, activeCount_filter_msg]
+    split_ifs with h_cls
+    · exact balanced.activeCount_push_eq_activeCount_pull_of_isBool msg fun i i_mem i_msg =>
+        is_bool i (List.mem_filter.mpr ⟨ i_mem, i_msg ▸ h_cls ⟩) i_msg
+    · rfl
+  · intro a a_mem a_pull
+    obtain ⟨ a_mem, a_cls ⟩ := List.mem_filter.mp a_mem
+    obtain ⟨ b, b_mem, b_msg, b_push ⟩ := balanced.matchedUpTo a a_mem a_pull
+    exact ⟨ b, List.mem_filter.mpr ⟨ b_mem, b_msg ▸ a_cls ⟩, b_msg, b_push ⟩
 
 /--
 A balance check: the condition that a verifier checks on the interactions with each channel, the
